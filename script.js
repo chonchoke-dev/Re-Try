@@ -23,7 +23,13 @@ const CONFIG = {
         GOAL: '#11ff88',
         ACCENT: '#ff0055',
         SPIKE: '#ff0044'
-    }
+    },
+    GHOST_PALETTE: [
+        '#ff00ff', // Magenta
+        '#00ff00', // Lime
+        '#ffff00', // Yellow
+        '#ff8800'  // Orange
+    ]
 };
 
 class Particle {
@@ -82,6 +88,10 @@ class Game {
         this.activeButtons = new Set();
         this.particles = [];
         this.shakeTime = 0;
+        this.stats = {
+            startTime: null,
+            deaths: 0
+        };
 
         this.keys = {};
         
@@ -93,6 +103,9 @@ class Game {
         window.addEventListener('keydown', (e) => {
             this.keys[e.code] = true;
             if (e.code === 'KeyR') this.retry();
+            if (e.code === 'KeyE' || e.code === 'Space') {
+                if (this.player && !this.isPaused) this.failLevel();
+            }
             if (e.code === 'Escape') this.togglePause();
         });
         window.addEventListener('keyup', (e) => this.keys[e.code] = false);
@@ -140,6 +153,9 @@ class Game {
     }
 
     startLevel(levelId) {
+        if (!this.stats.startTime) {
+            this.stats.startTime = Date.now();
+        }
         this.currentLevel = levelId;
         this.ghosts = [];
         this.resetLevel(true);
@@ -170,14 +186,23 @@ class Game {
     }
 
     retry() {
-        if (this.recording.length > 0) {
-            // Push current run to ghosts (FIFO if max reached)
-            this.ghosts.push([...this.recording]);
+        this.addGhost();
+        this.resetLevel(false);
+    }
+
+    addGhost() {
+        if (this.recording.length > 5) {
+            // Push current run to ghosts with an assigned color
+            const colorIndex = this.ghosts.length % CONFIG.GHOST_PALETTE.length;
+            this.ghosts.push({
+                data: [...this.recording],
+                color: CONFIG.GHOST_PALETTE[colorIndex]
+            });
+            
             if (this.ghosts.length > CONFIG.MAX_GHOSTS) {
                 this.ghosts.shift();
             }
         }
-        this.resetLevel(false);
     }
 
     loadMap(id) {
@@ -194,147 +219,135 @@ class Game {
                 ]
             },
             2: {
+                // Intro to Ghost Jumping
                 start: { x: 50, y: 500 },
-                goal: { x: 740, y: 200, w: 40, h: 40 },
+                goal: { x: 700, y: 150, w: 40, h: 40 },
                 walls: [
-                    { x: 0, y: 550, w: 300, h: 50 },
-                    { x: 500, y: 550, w: 300, h: 50 },
-                    { x: 300, y: 450, w: 200, h: 20, id: 'plat1', type: 'dynamic' },
-                    { x: 600, y: 350, w: 150, h: 20 }
+                    { x: 0, y: 550, w: 800, h: 50 },
+                    { x: 300, y: 400, w: 200, h: 20 }, // Low platform
+                    { x: 550, y: 250, w: 100, h: 20, id: 'd2', type: 'dynamic' }, // Needs button
+                    { x: 100, y: 150, w: 150, h: 20 } // Goal platform
                 ],
                 buttons: [
-                    { x: 150, y: 540, w: 40, h: 10, target: 'plat1' }
+                    { x: 400, y: 390, w: 40, h: 10, target: 'd2' }
                 ]
             },
             3: {
-                start: { x: 50, y: 500 },
-                goal: { x: 720, y: 500, w: 40, h: 40 },
-                walls: [
-                    { x: 0, y: 550, w: 800, h: 50 },
-                    { x: 300, y: 350, w: 30, h: 200, id: 'dA' },
-                    { x: 520, y: 350, w: 30, h: 200, id: 'dB' }
-                ],
-                buttons: [
-                    { x: 150, y: 540, w: 40, h: 10, target: 'dA' },
-                    { x: 410, y: 540, w: 40, h: 10, target: 'dB' }
-                ]
-            },
-            4: {
-                start: { x: 50, y: 500 },
-                goal: { x: 50, y: 50, w: 40, h: 40 },
-                walls: [
-                    { x: 0, y: 550, w: 800, h: 50 },
-                    { x: 400, y: 450, w: 200, h: 20 },
-                    { x: 100, y: 350, w: 200, h: 20 },
-                    { x: 400, y: 250, w: 200, h: 20 },
-                    { x: 100, y: 150, w: 200, h: 20 },
-                    { x: 0, y: 40, w: 30, h: 60, id: 'gD' }
-                ],
-                buttons: [
-                    { x: 500, y: 240, w: 40, h: 10, target: 'gD' }
-                ]
-            },
-            5: {
+                // Human Ladder Intro
                 start: { x: 50, y: 500 },
                 goal: { x: 700, y: 100, w: 40, h: 40 },
                 walls: [
                     { x: 0, y: 550, w: 200, h: 50 },
-                    { x: 250, y: 450, w: 100, h: 20, id: 'p1', type: 'dynamic' },
-                    { x: 450, y: 350, w: 100, h: 20, id: 'p2', type: 'dynamic' },
-                    { x: 250, y: 250, w: 100, h: 20, id: 'p3', type: 'dynamic' },
-                    { x: 600, y: 0, w: 200, h: 550 }
+                    { x: 400, y: 550, w: 400, h: 50 },
+                    // A wall that is too high to jump over normally (approx 160px gap)
+                    { x: 200, y: 350, w: 200, h: 250 },
+                    { x: 600, y: 200, w: 200, h: 20 }
+                ],
+                buttons: []
+            },
+            4: {
+                // Multi-ghost coordination
+                start: { x: 50, y: 500 },
+                goal: { x: 50, y: 50, w: 40, h: 40 },
+                walls: [
+                    { x: 0, y: 550, w: 800, h: 50 },
+                    { x: 600, y: 400, w: 100, h: 20 },
+                    { x: 400, y: 300, w: 100, h: 20 },
+                    { x: 200, y: 200, w: 100, h: 20 },
+                    { x: 0, y: 100, w: 100, h: 20 },
+                    { x: 500, y: 0, w: 20, h: 450, id: 'g4', type: 'dynamic' }
+                ],
+                buttons: [
+                    { x: 740, y: 540, w: 40, h: 10, target: 'g4' }
+                ]
+            },
+            5: {
+                // Synchronization
+                start: { x: 50, y: 500 },
+                goal: { x: 700, y: 100, w: 40, h: 40 },
+                walls: [
+                    { x: 0, y: 550, w: 200, h: 50 },
+                    { x: 250, y: 400, w: 100, h: 20, id: 'p1', type: 'dynamic' },
+                    { x: 450, y: 250, w: 100, h: 20, id: 'p2', type: 'dynamic' },
+                    { x: 600, y: 0, w: 200, h: 600 }
                 ],
                 buttons: [
                     { x: 50, y: 540, w: 40, h: 10, target: 'p1' },
-                    { x: 280, y: 440, w: 40, h: 10, target: 'p2' },
-                    { x: 480, y: 340, w: 40, h: 10, target: 'p3' }
+                    { x: 280, y: 390, w: 40, h: 10, target: 'p2' }
                 ]
             },
             6: {
-                // Spikes intro
-                start: { x: 50, y: 500 },
-                goal: { x: 700, y: 500, w: 40, h: 40 },
-                walls: [
-                    { x: 0, y: 540, w: 200, h: 60 },
-                    { x: 600, y: 540, w: 200, h: 60 }
-                ],
-                spikes: [
-                    { x: 200, y: 570, w: 40, h: 30 },
-                    { x: 240, y: 570, w: 40, h: 30 },
-                    { x: 280, y: 570, w: 40, h: 30 },
-                    { x: 320, y: 570, w: 40, h: 30 },
-                    { x: 360, y: 570, w: 40, h: 30 },
-                    { x: 400, y: 570, w: 40, h: 30 },
-                    { x: 440, y: 570, w: 40, h: 30 },
-                    { x: 480, y: 570, w: 40, h: 30 },
-                    { x: 520, y: 570, w: 40, h: 30 },
-                    { x: 560, y: 570, w: 40, h: 30 }
-                ]
-            },
-            7: {
-                // Moving Lift
-                start: { x: 50, y: 500 },
-                goal: { x: 100, y: 150, w: 40, h: 40 },
-                walls: [
-                    { x: 0, y: 550, w: 300, h: 50 },
-                    { x: 400, y: 500, w: 100, h: 20, id: 'lift', type: 'moving', x1: 400, y1: 500, x2: 400, y2: 200 },
-                    { x: 50, y: 200, w: 150, h: 20 }
-                ],
-                buttons: [
-                    { x: 150, y: 540, w: 40, h: 10, target: 'lift' }
-                ]
-            },
-            8: {
-                // Coordination
-                start: { x: 50, y: 500 },
-                goal: { x: 740, y: 100, w: 40, h: 40 },
-                walls: [
-                    { x: 0, y: 550, w: 200, h: 50 },
-                    { x: 300, y: 550, w: 200, h: 50 },
-                    { x: 600, y: 550, w: 200, h: 50 },
-                    { x: 200, y: 400, w: 100, h: 20, id: 'm1', type: 'moving', x1: 200, y1: 400, x2: 200, y2: 200 },
-                    { x: 500, y: 300, w: 100, h: 20, id: 'm2', type: 'moving', x1: 500, y1: 300, x2: 500, y2: 100 }
-                ],
-                buttons: [
-                    { x: 100, y: 540, w: 40, h: 10, target: 'm1' },
-                    { x: 400, y: 540, w: 40, h: 10, target: 'm2' }
-                ]
-            },
-            9: {
-                // The Gauntlet
+                // Ghost Bridge (Drop into spikes to create a platform!)
                 start: { x: 50, y: 500 },
                 goal: { x: 740, y: 500, w: 40, h: 40 },
                 walls: [
-                    { x: 0, y: 550, w: 100, h: 50 },
-                    { x: 700, y: 550, w: 100, h: 50 },
-                    { x: 150, y: 450, w: 150, h: 20, id: 'b9', x1: 150, y1: 550, x2: 550, y2: 550, type: 'moving' },
-                    { x: 300, y: 200, w: 200, h: 20 }
-                ],
-                buttons: [
-                    { x: 400, y: 190, w: 40, h: 10, target: 'b9' }
+                    { x: 0, y: 540, w: 150, h: 60 },
+                    { x: 650, y: 540, w: 150, h: 60 }
                 ],
                 spikes: [
-                    { x: 100, y: 580, w: 600, h: 20 }
+                    { x: 150, y: 570, w: 500, h: 30 }
+                ]
+            },
+            7: {
+                // Vertical Ascent
+                start: { x: 400, y: 500 },
+                goal: { x: 400, y: 50, w: 40, h: 40 },
+                walls: [
+                    { x: 300, y: 550, w: 200, h: 50 },
+                    { x: 100, y: 400, w: 100, h: 20 },
+                    { x: 600, y: 300, w: 100, h: 20 },
+                    { x: 100, y: 200, w: 100, h: 20 },
+                    { x: 350, y: 100, w: 100, h: 20 }
+                ],
+                buttons: []
+            },
+            8: {
+                // Triple Switch
+                start: { x: 50, y: 500 },
+                goal: { x: 740, y: 500, w: 40, h: 40 },
+                walls: [
+                    { x: 0, y: 550, w: 800, h: 50 },
+                    { x: 250, y: 300, w: 30, h: 250, id: 's1' },
+                    { x: 450, y: 300, w: 30, h: 250, id: 's2' },
+                    { x: 650, y: 300, w: 30, h: 250, id: 's3' }
+                ],
+                buttons: [
+                    { x: 100, y: 540, w: 30, h: 10, target: 's1' },
+                    { x: 350, y: 540, w: 30, h: 10, target: 's2' },
+                    { x: 550, y: 540, w: 30, h: 10, target: 's3' }
+                ]
+            },
+            9: {
+                // Precision Leap
+                start: { x: 50, y: 500 },
+                goal: { x: 740, y: 100, w: 40, h: 40 },
+                walls: [
+                    { x: 0, y: 550, w: 100, h: 50 },
+                    { x: 200, y: 450, w: 50, h: 20 },
+                    { x: 100, y: 300, w: 50, h: 20 },
+                    { x: 400, y: 400, w: 50, h: 20 },
+                    { x: 550, y: 250, w: 50, h: 20 },
+                    { x: 700, y: 150, w: 100, h: 20 }
+                ],
+                spikes: [
+                    { x: 100, y: 580, w: 700, h: 20 }
                 ]
             },
             10: {
-                // Final
-                start: { x: 50, y: 500 },
-                goal: { x: 400, y: 50, w: 40, h: 40 },
+                // THE ARCHIVE (Final Puzzle)
+                start: { x: 400, y: 500 },
+                goal: { x: 740, y: 50, w: 40, h: 40 },
                 walls: [
                     { x: 0, y: 550, w: 800, h: 50 },
-                    { x: 100, y: 400, w: 30, h: 150, id: 'f1' },
-                    { x: 300, y: 400, w: 30, h: 150, id: 'f2' },
-                    { x: 500, y: 400, w: 30, h: 150, id: 'f3' },
-                    { x: 350, y: 100, w: 100, h: 20 }
+                    { x: 50, y: 400, w: 100, h: 20, id: 'f1', type: 'dynamic' },
+                    { x: 250, y: 300, w: 100, h: 20, id: 'f2', type: 'dynamic' },
+                    { x: 450, y: 200, w: 100, h: 20, id: 'f3', type: 'dynamic' },
+                    { x: 650, y: 100, w: 150, h: 20 }
                 ],
                 buttons: [
-                    { x: 50, y: 540, w: 30, h: 10, target: 'f1' },
-                    { x: 200, y: 540, w: 30, h: 10, target: 'f2' },
+                    { x: 100, y: 540, w: 30, h: 10, target: 'f1' },
+                    { x: 700, y: 540, w: 30, h: 10, target: 'f2' },
                     { x: 400, y: 540, w: 30, h: 10, target: 'f3' }
-                ],
-                spikes: [
-                    { x: 250, y: 150, w: 300, h: 20 }
                 ]
             }
         };
@@ -418,16 +431,19 @@ class Game {
         this.activeButtons.clear();
         this.checkButtonTriggers(this.player);
         
-        // Ghosts also trigger buttons
-        this.ghosts.forEach(ghostData => {
-            const frameIndex = Math.min(this.frameCount - 1, ghostData.length - 1);
-            const ghostPos = ghostData[frameIndex];
-            this.checkButtonTriggers({
+        // Ghosts also trigger buttons and act as solid platforms
+        this.ghosts.forEach(ghost => {
+            const frameIndex = Math.min(this.frameCount - 1, ghost.data.length - 1);
+            const ghostPos = ghost.data[frameIndex];
+            const ghostEntity = {
                 x: ghostPos.x,
                 y: ghostPos.y,
                 width: 30,
-                height: 38
-            });
+                height: 38,
+                w: 30,
+                h: 38
+            };
+            this.checkButtonTriggers(ghostEntity);
         });
 
         // Check Spikes
@@ -451,21 +467,23 @@ class Game {
     }
 
     failLevel() {
+        this.stats.deaths++;
         this.spawnParticles(this.player.x + this.player.width/2, this.player.y + this.player.height/2, CONFIG.COLORS.ACCENT, 20);
         this.screenShake();
+        this.addGhost();
         this.resetLevel(false);
     }
 
     checkCollisions(horizontal) {
         // Wall collisions
         this.levelData.walls.forEach(wall => {
-                if (wall.type === 'moving') {
-                    // Moving platforms are always solid
-                } else {
-                    const isActive = this.activeButtons.has(wall.id);
-                    const isSolid = (wall.type === 'dynamic' ? isActive : !isActive);
-                    if (!isSolid) return;
-                }
+            if (wall.type === 'moving') {
+                // Moving platforms are always solid
+            } else {
+                const isActive = this.activeButtons.has(wall.id);
+                const isSolid = (wall.type === 'dynamic' ? isActive : !isActive);
+                if (!isSolid) return;
+            }
 
             if (this.rectIntersect(this.player, wall)) {
                 if (horizontal) {
@@ -479,6 +497,29 @@ class Game {
                     }
                     if (this.player.vy < 0) {
                         this.player.y = wall.y + wall.h;
+                        this.player.vy = 0;
+                    }
+                }
+            }
+        });
+
+        // Ghost collisions (Solid past-selves)
+        this.ghosts.forEach(ghost => {
+            const frameIndex = Math.min(this.frameCount - 1, ghost.data.length - 1);
+            const pos = ghost.data[frameIndex];
+            const ghostRect = { x: pos.x, y: pos.y, w: 30, h: 38 };
+
+            if (this.rectIntersect(this.player, ghostRect)) {
+                if (horizontal) {
+                    if (this.player.vx > 0) this.player.x = pos.x - this.player.width;
+                    else if (this.player.vx < 0) this.player.x = pos.x + ghostRect.w;
+                    this.player.vx = 0;
+                } else {
+                    if (this.player.vy > 0) {
+                        this.player.y = pos.y - this.player.height;
+                        this.player.onGround = true;
+                    } else if (this.player.vy < 0) {
+                        this.player.y = pos.y + ghostRect.h;
                         this.player.vy = 0;
                     }
                 }
@@ -508,6 +549,12 @@ class Game {
         if (this.currentLevel < 10) {
             this.startLevel(this.currentLevel + 1);
         } else {
+            const duration = Math.floor((Date.now() - this.stats.startTime) / 1000);
+            const mins = Math.floor(duration / 60).toString().padStart(2, '0');
+            const secs = (duration % 60).toString().padStart(2, '0');
+            
+            document.getElementById('final-time').textContent = `${mins}:${secs}`;
+            document.getElementById('final-deaths').textContent = this.stats.deaths;
             this.showScreen('clear');
         }
     }
@@ -623,18 +670,26 @@ class Game {
         });
 
         // Draw Ghosts
-        this.ghosts.forEach(ghostData => {
-            const frameIndex = Math.min(this.frameCount - 1, ghostData.length - 1);
-            const pos = ghostData[frameIndex];
+        this.ghosts.forEach(ghost => {
+            const frameIndex = Math.min(this.frameCount - 1, ghost.data.length - 1);
+            const pos = ghost.data[frameIndex];
+            const color = ghost.color;
             
+            // Draw path end marker
+            const finalPos = ghost.data[ghost.data.length - 1];
+            this.ctx.strokeStyle = color;
+            this.ctx.setLineDash([5, 5]);
+            this.ctx.strokeRect(finalPos.x - 2, finalPos.y - 2, this.player.width + 4, this.player.height + 4);
+            this.ctx.setLineDash([]);
+
             // Fade out ghosts at the end of their recording
-            const isEnding = this.frameCount > ghostData.length - 30;
-            const alpha = isEnding ? Math.max(0, (ghostData.length - this.frameCount) / 30) : 1.0;
+            const isEnding = this.frameCount > ghost.data.length - 30;
+            const alpha = isEnding ? Math.max(0, (ghost.data.length - this.frameCount) / 30) : 1.0;
             
             this.ctx.globalAlpha = alpha * 0.4;
-            this.ctx.fillStyle = CONFIG.COLORS.GHOST;
+            this.ctx.fillStyle = color;
             this.ctx.shadowBlur = 15;
-            this.ctx.shadowColor = CONFIG.COLORS.GHOST_GLOW;
+            this.ctx.shadowColor = color;
             this.ctx.fillRect(pos.x, pos.y, this.player.width, this.player.height);
             this.ctx.shadowBlur = 0;
             this.ctx.globalAlpha = 1.0;

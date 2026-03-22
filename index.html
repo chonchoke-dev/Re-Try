@@ -33,7 +33,7 @@
             <div id="game-ui">
                 <div class="level-info">SECTOR: <span id="current-level-id">1</span></div>
                 <div class="ghost-info">GHOSTS: <span id="ghost-count">0</span>/3</div>
-                <div class="controls-hint">[R] RETRY | [WASD] MOVE</div>
+                <div class="controls-hint">[R] RETRY | [E/SPACE] ECHO | [WASD] MOVE</div>
             </div>
             <div id="pause-menu" class="hidden">
                 <h3>MODULE PAUSED</h3>
@@ -43,10 +43,13 @@
             </div>
         </div>
 
-        <!-- Game Clear Screen -->
         <div id="clear-screen" class="screen hidden">
             <h1 class="glitch" data-text="MISSION COMPLETE">MISSION COMPLETE</h1>
             <p class="subtitle">ALL SECTORS SECURED</p>
+            <div class="final-stats">
+                <p>TOTAL TIME: <span id="final-time">00:00</span></p>
+                <p>TOTAL ATTEMPTS: <span id="final-deaths">0</span></p>
+            </div>
             <button id="return-to-title-btn" class="neon-btn">RETURN TO BASE</button>
         </div>
     </div>
