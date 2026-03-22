@@ -12,7 +12,7 @@ const CONFIG = {
     MOVE_SPEED: 4.8,
     COYOTE_TIME: 6, // Frames
     JUMP_BUFFER: 8, // Frames
-    MAX_ECHOES: 3,
+    MAX_ECHOES: 4,
     COLORS: {
         BACKGROUND: '#050508',
         PLAYER: '#00f2ff',
@@ -29,7 +29,7 @@ const CONFIG = {
         PARTICLE_PLAYER: '#00f2ff',
         PARTICLE_ECHO: '#ff00ff'
     },
-    ECHO_PALETTE: ['#ff00ff', '#00ff00', '#ffff00']
+    ECHO_PALETTE: ['#ff00ff', '#00ff88', '#0099ff', '#ffaa00', '#ff0055']
 };
 
 class Camera {
@@ -143,6 +143,7 @@ class Game {
             title: document.getElementById('title-screen'),
             levelSelect: document.getElementById('level-select'),
             game: document.getElementById('game-screen'),
+            levelClear: document.getElementById('level-clear-screen'),
             clear: document.getElementById('clear-screen')
         };
 
@@ -159,7 +160,8 @@ class Game {
             isRecording: false,
             recording: [],
             recordStartX: 0,
-            recordStartY: 0
+            recordStartY: 0,
+            trail: []
         };
 
         this.echoes = [];
@@ -174,6 +176,7 @@ class Game {
 
     init() {
         window.addEventListener('keydown', (e) => {
+            if (this.screens.levelClear.classList.contains('hidden') === false) return; // Disable keys on clear screen
             this.keys[e.code] = true;
             if (e.code === 'KeyR') this.resetLevel();
             if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') this.handlePhase();
@@ -193,6 +196,15 @@ class Game {
             this.showScreen('levelSelect');
         };
         document.getElementById('return-to-title-btn').onclick = () => this.showScreen('title');
+        
+        document.getElementById('next-level-btn').onclick = () => {
+            if (this.currentLevel < 2) {
+                this.startLevel(this.currentLevel + 1);
+            } else {
+                this.showScreen('clear');
+            }
+        };
+        document.getElementById('level-clear-to-select').onclick = () => this.showScreen('levelSelect');
 
         this.renderLevelGrid();
         this.showScreen('title');
@@ -209,7 +221,7 @@ class Game {
     renderLevelGrid() {
         const grid = document.getElementById('level-grid');
         grid.innerHTML = '';
-        for (let i = 0; i <= 2; i++) {
+        for (let i = 0; i <= 3; i++) {
             const btn = document.createElement('div');
             btn.className = `level-btn unlocked`;
             btn.textContent = i === 0 ? 'T' : i;
@@ -245,6 +257,7 @@ class Game {
             this.player.recording = [];
             this.player.recordStartX = this.player.x;
             this.player.recordStartY = this.player.y;
+            this.player.trail = [];
         } else {
             // Spawn Echo
             if (this.player.recording.length > 5) {
@@ -257,6 +270,7 @@ class Game {
                 this.player.y = this.player.recordStartY;
                 this.player.vx = 0;
                 this.player.vy = 0;
+                this.player.trail = [];
                 this.spawnParticles(this.player.x + 16, this.player.y + 21, color, 15);
             }
             this.player.isRecording = false;
@@ -277,40 +291,67 @@ class Game {
                 ],
                 spikes: [{ x: 800, y: 580, w: 100, h: 20 }],
                 hints: [
-                    { x: 100, y: 300, text: "AD to Move, SPACE to Jump" },
+                    { x: 100, y: 300, text: "A / D to Move" },
+                    { x: 100, y: 330, text: "W / SPACE to Jump" },
                     { x: 750, y: 450, text: "Wait, a gap!" },
-                    { x: 1100, y: 300, text: "HOLD SHIFT to record a jump," },
-                    { x: 1100, y: 330, text: "RELEASE to teleport and create an ECHO platform." }
+                    { x: 1100, y: 250, text: "HOLD SHIFT to record your path" },
+                    { x: 1100, y: 280, text: "(Watch the neon trail!)" },
+                    { x: 1100, y: 310, text: "RELEASE to teleport & create a platform" }
                 ]
             },
-            1: { // Horizontal Run
-                width: 3000,
+            1: { // Sky Climb
+                width: 2500,
                 start: { x: 100, y: 400 },
-                goal: { x: 2800, y: 400, w: 60, h: 60 },
+                goal: { x: 2300, y: 450, w: 60, h: 60 },
                 walls: [
-                    { x: 0, y: 550, w: 1000, h: 50 },
-                    { x: 1100, y: 450, w: 200, h: 20 },
-                    { x: 1400, y: 350, w: 200, h: 20 },
-                    { x: 1700, y: 450, w: 200, h: 20 },
-                    { x: 2000, y: 550, w: 1000, h: 50 }
+                    { x: 0, y: 550, w: 600, h: 50 },
+                    { x: 600, y: 0, w: 40, h: 450 }, // Wall too high to jump over (450px high)
+                    { x: 750, y: 550, w: 600, h: 50 },
+                    { x: 1350, y: 0, w: 40, h: 450 }, // Another high wall
+                    { x: 1500, y: 550, w: 1000, h: 50 }
                 ],
                 spikes: [
-                    { x: 1000, y: 580, w: 1000, h: 20 }
+                    { x: 600, y: 580, w: 150, h: 20 }
                 ],
-                hints: []
+                hints: [
+                    { x: 300, y: 250, text: "WALL TOO HIGH?" },
+                    { x: 300, y: 280, text: "RECORD A JUMP AT THE PEAK" },
+                    { x: 300, y: 310, text: "AND USE IT AS A LADDER." }
+                ]
             },
-            2: { // Button Duo
+            2: { // Sequential Gates
                 width: 2000,
                 start: { x: 100, y: 400 },
-                goal: { x: 1800, y: 500, w: 60, h: 60 },
+                goal: { x: 1800, y: 490, w: 60, h: 60 },
                 walls: [
                     { x: 0, y: 550, w: 2000, h: 50 },
-                    { x: 800, y: 200, w: 40, h: 350, id: 'door1' } // Gate
+                    { x: 800, y: 100, w: 40, h: 450, id: 'door1' }, // Door 1
+                    { x: 1400, y: 100, w: 40, h: 450, id: 'door2' } // Door 2
                 ],
                 buttons: [
-                    { x: 600, y: 540, w: 40, h: 10, target: 'door1' }
+                    { x: 500, y: 540, w: 40, h: 10, target: 'door1' },
+                    { x: 1100, y: 540, w: 40, h: 10, target: 'door2' }
                 ],
-                hints: [{ x: 500, y: 450, text: "Echoes can hold buttons." }]
+                hints: [
+                    { x: 300, y: 300, text: "YOU CAN'T BE IN TWO PLACES AT ONCE." },
+                    { x: 1000, y: 300, text: "UNLESS YOU HAVE AN ECHO." }
+                ]
+            },
+            3: { // Leap of Faith
+                width: 4000,
+                start: { x: 100, y: 400 },
+                goal: { x: 3800, y: 450, w: 60, h: 60 },
+                walls: [
+                    { x: 0, y: 550, w: 400, h: 50 },
+                    { x: 3600, y: 550, w: 400, h: 50 }
+                ],
+                spikes: [
+                    { x: 400, y: 580, w: 3200, h: 20 }
+                ],
+                hints: [
+                    { x: 200, y: 300, text: "A MASSIVE GAP." },
+                    { x: 200, y: 330, text: "CHAIN MULTIPLE ECHOES IN MID-AIR." }
+                ]
             }
         };
         this.levelData = levels[id] || levels[0];
@@ -382,6 +423,10 @@ class Game {
         // Recording
         if (this.player.isRecording) {
             this.player.recording.push({ x: this.player.x, y: this.player.y });
+            // Add to trail every few frames for performance
+            if (this.player.recording.length % 2 === 0) {
+                 this.player.trail.push({ x: this.player.x + 16, y: this.player.y + 21 });
+            }
         }
     }
 
@@ -440,8 +485,21 @@ class Game {
     }
 
     completeLevel() {
-        if (this.currentLevel < 2) {
-            this.startLevel(this.currentLevel + 1);
+        if (this.currentLevel >= 0 && this.currentLevel <= 3) {
+             // Show Level Clear Screen
+             const idText = this.currentLevel === 0 ? 'Tutorial' : this.currentLevel;
+             document.getElementById('cleared-sector-id').textContent = idText;
+             
+             // Update buttons
+             if (this.currentLevel === 3) {
+                 document.getElementById('next-level-btn').textContent = 'COMPLETE ALL DATA CORES';
+                 document.getElementById('next-level-btn').onclick = () => this.showScreen('clear');
+             } else {
+                 document.getElementById('next-level-btn').textContent = 'PROCEED TO NEXT SECTOR';
+                 document.getElementById('next-level-btn').onclick = () => this.startLevel(this.currentLevel + 1);
+             }
+             
+             this.showScreen('levelClear');
         } else {
             this.showScreen('clear');
         }
@@ -521,10 +579,30 @@ class Game {
         this.ctx.shadowBlur = 20;
         this.ctx.shadowColor = CONFIG.COLORS.GOAL;
         this.ctx.fillRect(g.x - this.camera.x, g.y - this.camera.y, g.w, g.h);
+        
+        // Pulse effect for goal
+        this.ctx.strokeStyle = CONFIG.COLORS.GOAL;
+        this.ctx.lineWidth = 2;
+        const pulse = (Math.sin(Date.now() / 200) + 1) * 5;
+        this.ctx.strokeRect(g.x - this.camera.x - pulse, g.y - this.camera.y - pulse, g.w + pulse * 2, g.h + pulse * 2);
         this.ctx.shadowBlur = 0;
 
         // Echoes
         this.echoes.forEach(e => e.draw(this.ctx, this.camera));
+
+        // Recording Trail
+        if (this.player.isRecording && this.player.trail.length > 1) {
+            this.ctx.beginPath();
+            this.ctx.strokeStyle = '#ff00ff';
+            this.ctx.lineWidth = 3;
+            this.ctx.setLineDash([5, 5]);
+            this.ctx.moveTo(this.player.trail[0].x - this.camera.x, this.player.trail[0].y - this.camera.y);
+            for (let i = 1; i < this.player.trail.length; i++) {
+                this.ctx.lineTo(this.player.trail[i].x - this.camera.x, this.player.trail[i].y - this.camera.y);
+            }
+            this.ctx.stroke();
+            this.ctx.setLineDash([]);
+        }
 
         // Player
         this.ctx.fillStyle = CONFIG.COLORS.PLAYER;
@@ -569,8 +647,11 @@ class Game {
         this.ctx.fillText(`ECHOES: ${this.echoes.length}/${CONFIG.MAX_ECHOES}`, 20, 50);
         
         if (this.player.isRecording) {
-            this.ctx.fillStyle = '#ff00ff';
-            this.ctx.fillText('PHASE RECORDING...', 20, 70);
+            const blink = Math.floor(Date.now() / 400) % 2 === 0;
+            if (blink) {
+                this.ctx.fillStyle = '#ff00ff';
+                this.ctx.fillText('PHASE RECORDING...', 20, 70);
+            }
         }
     }
 }
