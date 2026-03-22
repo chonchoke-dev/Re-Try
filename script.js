@@ -1,63 +1,134 @@
 /**
- * Re:Try - Core Game Logic
+ * Echo Run - Core Game Engine 2.0
+ * Mario-inspired horizontal platformer with Phasing mechanics.
  */
 
 const CONFIG = {
     SCREEN_WIDTH: 800,
     SCREEN_HEIGHT: 600,
     TILE_SIZE: 40,
-    GRAVITY: 0.6,
-    JUMP_FORCE: -12,
-    MOVE_SPEED: 5,
-    MAX_GHOSTS: 3,
+    GRAVITY: 0.5,
+    JUMP_FORCE: -11,
+    MOVE_SPEED: 4.8,
+    COYOTE_TIME: 6, // Frames
+    JUMP_BUFFER: 8, // Frames
+    MAX_ECHOES: 3,
     COLORS: {
         BACKGROUND: '#050508',
         PLAYER: '#00f2ff',
         PLAYER_GLOW: 'rgba(0, 242, 255, 0.8)',
-        GHOST: 'rgba(0, 242, 255, 0.3)',
-        GHOST_GLOW: 'rgba(0, 242, 255, 0.2)',
+        ECHO: 'rgba(0, 242, 255, 0.4)',
+        ECHO_GLOW: 'rgba(0, 242, 255, 0.2)',
         WALL: '#1a1a2e',
         DOOR: '#ffcc00',
         BUTTON: '#333',
         BUTTON_ACTIVE: '#ffcc00',
         GOAL: '#11ff88',
         ACCENT: '#ff0055',
-        SPIKE: '#ff0044'
+        SPIKE: '#ff0044',
+        PARTICLE_PLAYER: '#00f2ff',
+        PARTICLE_ECHO: '#ff00ff'
     },
-    GHOST_PALETTE: [
-        '#ff00ff', // Magenta
-        '#00ff00', // Lime
-        '#ffff00', // Yellow
-        '#ff8800'  // Orange
-    ]
+    ECHO_PALETTE: ['#ff00ff', '#00ff00', '#ffff00']
 };
+
+class Camera {
+    constructor() {
+        this.x = 0;
+        this.y = 0;
+        this.deadzone = 200;
+    }
+
+    update(playerX, playerY, levelWidth, levelHeight) {
+        // Horizontal scroll
+        if (playerX - this.x > CONFIG.SCREEN_WIDTH - this.deadzone) {
+            this.x = playerX - (CONFIG.SCREEN_WIDTH - this.deadzone);
+        } else if (playerX - this.x < this.deadzone) {
+            this.x = playerX - this.deadzone;
+        }
+
+        // Vertical scroll (optional, but keep it centered-ish)
+        this.y = 0; // Stick to bottom for now
+
+        // Clamp
+        this.x = Math.max(0, Math.min(this.x, levelWidth - CONFIG.SCREEN_WIDTH));
+    }
+}
 
 class Particle {
     constructor(x, y, color) {
         this.x = x;
         this.y = y;
         this.color = color;
-        this.vx = (Math.random() - 0.5) * 8;
-        this.vy = (Math.random() - 0.5) * 8;
+        this.vx = (Math.random() - 0.5) * 6;
+        this.vy = (Math.random() - 0.5) * 6;
         this.life = 1.0;
-        this.decay = 0.02 + Math.random() * 0.03;
-        this.size = 2 + Math.random() * 4;
+        this.decay = 0.02 + Math.random() * 0.05;
+        this.size = 2 + Math.random() * 3;
     }
 
     update() {
         this.x += this.vx;
         this.y += this.vy;
         this.life -= this.decay;
-        this.vy += 0.1; // Slight gravity
+        this.vy += 0.1;
     }
 
-    draw(ctx) {
+    draw(ctx, camera) {
         ctx.globalAlpha = this.life;
         ctx.fillStyle = this.color;
         ctx.beginPath();
-        ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+        ctx.arc(this.x - camera.x, this.y - camera.y, this.size, 0, Math.PI * 2);
         ctx.fill();
         ctx.globalAlpha = 1.0;
+    }
+}
+
+class Echo {
+    constructor(recording, color) {
+        this.recording = [...recording];
+        this.color = color;
+        this.frame = 0;
+        this.width = 32;
+        this.height = 42;
+        this.x = this.recording[0].x;
+        this.y = this.recording[0].y;
+        this.isDone = false;
+    }
+
+    update() {
+        if (this.frame < this.recording.length) {
+            const pos = this.recording[this.frame];
+            this.x = pos.x;
+            this.y = pos.y;
+            this.frame++;
+        } else {
+            this.isDone = true;
+        }
+    }
+
+    draw(ctx, camera) {
+        const alpha = this.isDone ? 0.2 : 0.5;
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = this.color;
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = this.color;
+        ctx.fillRect(this.x - camera.x, this.y - camera.y, this.width, this.height);
+        
+        // Outline if done
+        if (this.isDone) {
+            ctx.strokeStyle = this.color;
+            ctx.setLineDash([4, 4]);
+            ctx.strokeRect(this.x - camera.x, this.y - camera.y, this.width, this.height);
+            ctx.setLineDash([]);
+        }
+        
+        ctx.shadowBlur = 0;
+        ctx.globalAlpha = 1.0;
+    }
+
+    getRect() {
+        return { x: this.x, y: this.y, w: this.width, h: this.height };
     }
 }
 
@@ -75,37 +146,37 @@ class Game {
             clear: document.getElementById('clear-screen')
         };
 
+        this.camera = new Camera();
         this.currentLevel = 0;
-        this.unlockedLevels = 10; // Keeping all levels unlocked for review
+        this.unlockedLevels = 1;
         this.isPaused = false;
         
-        // Game State
-        this.player = null;
-        this.ghosts = [];
-        this.levelData = null;
-        this.recording = [];
-        this.frameCount = 0;
-        this.activeButtons = new Set();
-        this.particles = [];
-        this.shakeTime = 0;
-        this.stats = {
-            startTime: null,
-            deaths: 0
+        this.player = {
+            x: 0, y: 0, vx: 0, vy: 0, width: 32, height: 42,
+            onGround: false,
+            coyoteTimer: 0,
+            jumpBuffer: 0,
+            isRecording: false,
+            recording: [],
+            recordStartX: 0,
+            recordStartY: 0
         };
 
+        this.echoes = [];
+        this.levelData = null;
+        this.particles = [];
         this.keys = {};
-        
+        this.activeButtons = new Set();
+        this.shakeTime = 0;
+
         this.init();
     }
 
     init() {
-        // Event Listeners
         window.addEventListener('keydown', (e) => {
             this.keys[e.code] = true;
-            if (e.code === 'KeyR') this.retry();
-            if (e.code === 'KeyE' || e.code === 'Space') {
-                if (this.player && !this.isPaused) this.failLevel();
-            }
+            if (e.code === 'KeyR') this.resetLevel();
+            if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') this.handlePhase();
             if (e.code === 'Escape') this.togglePause();
         });
         window.addEventListener('keyup', (e) => this.keys[e.code] = false);
@@ -114,11 +185,11 @@ class Game {
         document.getElementById('back-to-title').onclick = () => this.showScreen('title');
         document.getElementById('resume-btn').onclick = () => this.togglePause();
         document.getElementById('restart-level-btn').onclick = () => {
-            this.togglePause();
-            this.resetLevel(true);
+            if (this.isPaused) this.togglePause();
+            this.resetLevel();
         };
         document.getElementById('quit-to-select').onclick = () => {
-            this.togglePause();
+             if (this.isPaused) this.togglePause();
             this.showScreen('levelSelect');
         };
         document.getElementById('return-to-title-btn').onclick = () => this.showScreen('title');
@@ -126,256 +197,127 @@ class Game {
         this.renderLevelGrid();
         this.showScreen('title');
         
-        requestAnimationFrame((t) => this.loop(t));
+        requestAnimationFrame(() => this.loop());
     }
 
     showScreen(screenId) {
-        Object.keys(this.screens).forEach(key => {
-            this.screens[key].classList.add('hidden');
-        });
+        Object.keys(this.screens).forEach(key => this.screens[key].classList.add('hidden'));
         this.screens[screenId].classList.remove('hidden');
-        
         if (screenId === 'levelSelect') this.renderLevelGrid();
     }
 
     renderLevelGrid() {
         const grid = document.getElementById('level-grid');
         grid.innerHTML = '';
-        for (let i = 1; i <= 10; i++) {
+        for (let i = 0; i <= 2; i++) {
             const btn = document.createElement('div');
-            btn.className = `level-btn ${i <= this.unlockedLevels ? 'unlocked' : ''}`;
-            btn.textContent = i;
-            if (i <= this.unlockedLevels) {
-                btn.onclick = () => this.startLevel(i);
-            }
+            btn.className = `level-btn unlocked`;
+            btn.textContent = i === 0 ? 'T' : i;
+            btn.onclick = () => this.startLevel(i);
             grid.appendChild(btn);
         }
     }
 
-    startLevel(levelId) {
-        if (!this.stats.startTime) {
-            this.stats.startTime = Date.now();
-        }
-        this.currentLevel = levelId;
-        this.ghosts = [];
-        this.resetLevel(true);
+    startLevel(id) {
+        this.currentLevel = id;
+        this.echoes = [];
+        this.resetLevel();
         this.showScreen('game');
-        document.getElementById('current-level-id').textContent = levelId;
+        document.getElementById('current-level-id').textContent = id === 0 ? 'Tutorial' : id;
     }
 
-    resetLevel(resetGhosts = false) {
-        if (resetGhosts) this.ghosts = [];
-        
-        this.frameCount = 0;
-        this.recording = [];
-        this.activeButtons.clear();
+    resetLevel() {
         this.loadMap(this.currentLevel);
-        
-        // Initialize player
-        this.player = {
-            x: this.levelData.start.x,
-            y: this.levelData.start.y,
-            width: 30,
-            height: 38,
-            vx: 0,
-            vy: 0,
-            onGround: false
-        };
-
-        this.updateUI();
+        this.player.x = this.levelData.start.x;
+        this.player.y = this.levelData.start.y;
+        this.player.vx = 0;
+        this.player.vy = 0;
+        this.player.isRecording = false;
+        this.player.recording = [];
+        this.echoes = [];
+        this.activeButtons.clear();
+        this.camera.x = 0;
     }
 
-    retry() {
-        this.addGhost();
-        this.resetLevel(false);
-    }
-
-    addGhost() {
-        if (this.recording.length > 5) {
-            // Push current run to ghosts with an assigned color
-            const colorIndex = this.ghosts.length % CONFIG.GHOST_PALETTE.length;
-            this.ghosts.push({
-                data: [...this.recording],
-                color: CONFIG.GHOST_PALETTE[colorIndex]
-            });
-            
-            if (this.ghosts.length > CONFIG.MAX_GHOSTS) {
-                this.ghosts.shift();
+    handlePhase() {
+        if (!this.player.isRecording) {
+            this.player.isRecording = true;
+            this.player.recording = [];
+            this.player.recordStartX = this.player.x;
+            this.player.recordStartY = this.player.y;
+        } else {
+            // Spawn Echo
+            if (this.player.recording.length > 5) {
+                const color = CONFIG.ECHO_PALETTE[this.echoes.length % CONFIG.ECHO_PALETTE.length];
+                this.echoes.push(new Echo(this.player.recording, color));
+                if (this.echoes.length > CONFIG.MAX_ECHOES) this.echoes.shift();
+                
+                // Teleport back
+                this.player.x = this.player.recordStartX;
+                this.player.y = this.player.recordStartY;
+                this.player.vx = 0;
+                this.player.vy = 0;
+                this.spawnParticles(this.player.x + 16, this.player.y + 21, color, 15);
             }
+            this.player.isRecording = false;
         }
     }
 
     loadMap(id) {
         const levels = {
-            1: {
-                start: { x: 100, y: 500 },
-                goal: { x: 740, y: 500, w: 40, h: 40 },
+            0: { // Tutorial
+                width: 2000,
+                start: { x: 100, y: 400 },
+                goal: { x: 1800, y: 450, w: 60, h: 60 },
                 walls: [
                     { x: 0, y: 550, w: 800, h: 50 },
-                    { x: 400, y: 400, w: 30, h: 150, id: 'door1' }
+                    { x: 900, y: 550, w: 1100, h: 50 }, // Gap at 800-900
+                    { x: 400, y: 450, w: 100, h: 20 },  // Small jump
+                    { x: 1200, y: 350, w: 200, h: 200 } // High wall! Need Echo.
                 ],
-                buttons: [
-                    { x: 250, y: 540, w: 40, h: 10, target: 'door1' }
+                spikes: [{ x: 800, y: 580, w: 100, h: 20 }],
+                hints: [
+                    { x: 100, y: 300, text: "AD to Move, SPACE to Jump" },
+                    { x: 750, y: 450, text: "Wait, a gap!" },
+                    { x: 1100, y: 300, text: "HOLD SHIFT to record a jump," },
+                    { x: 1100, y: 330, text: "RELEASE to teleport and create an ECHO platform." }
                 ]
             },
-            2: {
-                // Intro to Ghost Jumping
-                start: { x: 50, y: 500 },
-                goal: { x: 700, y: 150, w: 40, h: 40 },
+            1: { // Horizontal Run
+                width: 3000,
+                start: { x: 100, y: 400 },
+                goal: { x: 2800, y: 400, w: 60, h: 60 },
                 walls: [
-                    { x: 0, y: 550, w: 800, h: 50 },
-                    { x: 300, y: 400, w: 200, h: 20 }, // Low platform
-                    { x: 550, y: 250, w: 100, h: 20, id: 'd2', type: 'dynamic' }, // Needs button
-                    { x: 100, y: 150, w: 150, h: 20 } // Goal platform
-                ],
-                buttons: [
-                    { x: 400, y: 390, w: 40, h: 10, target: 'd2' }
-                ]
-            },
-            3: {
-                // Human Ladder Intro
-                start: { x: 50, y: 500 },
-                goal: { x: 700, y: 100, w: 40, h: 40 },
-                walls: [
-                    { x: 0, y: 550, w: 200, h: 50 },
-                    { x: 400, y: 550, w: 400, h: 50 },
-                    // A wall that is too high to jump over normally (approx 160px gap)
-                    { x: 200, y: 350, w: 200, h: 250 },
-                    { x: 600, y: 200, w: 200, h: 20 }
-                ],
-                buttons: []
-            },
-            4: {
-                // Multi-ghost coordination
-                start: { x: 50, y: 500 },
-                goal: { x: 50, y: 50, w: 40, h: 40 },
-                walls: [
-                    { x: 0, y: 550, w: 800, h: 50 },
-                    { x: 600, y: 400, w: 100, h: 20 },
-                    { x: 400, y: 300, w: 100, h: 20 },
-                    { x: 200, y: 200, w: 100, h: 20 },
-                    { x: 0, y: 100, w: 100, h: 20 },
-                    { x: 500, y: 0, w: 20, h: 450, id: 'g4', type: 'dynamic' }
-                ],
-                buttons: [
-                    { x: 740, y: 540, w: 40, h: 10, target: 'g4' }
-                ]
-            },
-            5: {
-                // Synchronization
-                start: { x: 50, y: 500 },
-                goal: { x: 700, y: 100, w: 40, h: 40 },
-                walls: [
-                    { x: 0, y: 550, w: 200, h: 50 },
-                    { x: 250, y: 400, w: 100, h: 20, id: 'p1', type: 'dynamic' },
-                    { x: 450, y: 250, w: 100, h: 20, id: 'p2', type: 'dynamic' },
-                    { x: 600, y: 0, w: 200, h: 600 }
-                ],
-                buttons: [
-                    { x: 50, y: 540, w: 40, h: 10, target: 'p1' },
-                    { x: 280, y: 390, w: 40, h: 10, target: 'p2' }
-                ]
-            },
-            6: {
-                // Ghost Bridge (Drop into spikes to create a platform!)
-                start: { x: 50, y: 500 },
-                goal: { x: 740, y: 500, w: 40, h: 40 },
-                walls: [
-                    { x: 0, y: 540, w: 150, h: 60 },
-                    { x: 650, y: 540, w: 150, h: 60 }
+                    { x: 0, y: 550, w: 1000, h: 50 },
+                    { x: 1100, y: 450, w: 200, h: 20 },
+                    { x: 1400, y: 350, w: 200, h: 20 },
+                    { x: 1700, y: 450, w: 200, h: 20 },
+                    { x: 2000, y: 550, w: 1000, h: 50 }
                 ],
                 spikes: [
-                    { x: 150, y: 570, w: 500, h: 30 }
-                ]
-            },
-            7: {
-                // Vertical Ascent
-                start: { x: 400, y: 500 },
-                goal: { x: 400, y: 50, w: 40, h: 40 },
-                walls: [
-                    { x: 300, y: 550, w: 200, h: 50 },
-                    { x: 100, y: 400, w: 100, h: 20 },
-                    { x: 600, y: 300, w: 100, h: 20 },
-                    { x: 100, y: 200, w: 100, h: 20 },
-                    { x: 350, y: 100, w: 100, h: 20 }
+                    { x: 1000, y: 580, w: 1000, h: 20 }
                 ],
-                buttons: []
+                hints: []
             },
-            8: {
-                // Triple Switch
-                start: { x: 50, y: 500 },
-                goal: { x: 740, y: 500, w: 40, h: 40 },
+            2: { // Button Duo
+                width: 2000,
+                start: { x: 100, y: 400 },
+                goal: { x: 1800, y: 500, w: 60, h: 60 },
                 walls: [
-                    { x: 0, y: 550, w: 800, h: 50 },
-                    { x: 250, y: 300, w: 30, h: 250, id: 's1' },
-                    { x: 450, y: 300, w: 30, h: 250, id: 's2' },
-                    { x: 650, y: 300, w: 30, h: 250, id: 's3' }
+                    { x: 0, y: 550, w: 2000, h: 50 },
+                    { x: 800, y: 200, w: 40, h: 350, id: 'door1' } // Gate
                 ],
                 buttons: [
-                    { x: 100, y: 540, w: 30, h: 10, target: 's1' },
-                    { x: 350, y: 540, w: 30, h: 10, target: 's2' },
-                    { x: 550, y: 540, w: 30, h: 10, target: 's3' }
-                ]
-            },
-            9: {
-                // Precision Leap
-                start: { x: 50, y: 500 },
-                goal: { x: 740, y: 100, w: 40, h: 40 },
-                walls: [
-                    { x: 0, y: 550, w: 100, h: 50 },
-                    { x: 200, y: 450, w: 50, h: 20 },
-                    { x: 100, y: 300, w: 50, h: 20 },
-                    { x: 400, y: 400, w: 50, h: 20 },
-                    { x: 550, y: 250, w: 50, h: 20 },
-                    { x: 700, y: 150, w: 100, h: 20 }
+                    { x: 600, y: 540, w: 40, h: 10, target: 'door1' }
                 ],
-                spikes: [
-                    { x: 100, y: 580, w: 700, h: 20 }
-                ]
-            },
-            10: {
-                // THE ARCHIVE (Final Puzzle)
-                start: { x: 400, y: 500 },
-                goal: { x: 740, y: 50, w: 40, h: 40 },
-                walls: [
-                    { x: 0, y: 550, w: 800, h: 50 },
-                    { x: 50, y: 400, w: 100, h: 20, id: 'f1', type: 'dynamic' },
-                    { x: 250, y: 300, w: 100, h: 20, id: 'f2', type: 'dynamic' },
-                    { x: 450, y: 200, w: 100, h: 20, id: 'f3', type: 'dynamic' },
-                    { x: 650, y: 100, w: 150, h: 20 }
-                ],
-                buttons: [
-                    { x: 100, y: 540, w: 30, h: 10, target: 'f1' },
-                    { x: 700, y: 540, w: 30, h: 10, target: 'f2' },
-                    { x: 400, y: 540, w: 30, h: 10, target: 'f3' }
-                ]
+                hints: [{ x: 500, y: 450, text: "Echoes can hold buttons." }]
             }
         };
-        
-        this.levelData = JSON.parse(JSON.stringify(levels[id] || levels[1]));
-    }
-
-    togglePause() {
-        this.isPaused = !this.isPaused;
-        document.getElementById('pause-menu').classList.toggle('hidden', !this.isPaused);
-    }
-
-    updateUI() {
-        document.getElementById('ghost-count').textContent = this.ghosts.length;
-    }
-
-    spawnParticles(x, y, color, count = 10) {
-        for (let i = 0; i < count; i++) {
-            this.particles.push(new Particle(x, y, color));
-        }
-    }
-
-    screenShake(duration = 20) {
-        this.shakeTime = duration;
+        this.levelData = levels[id] || levels[0];
     }
 
     loop() {
-        if (!this.isPaused && this.player) {
+        if (!this.isPaused && this.levelData) {
             this.update();
         }
         this.draw();
@@ -383,342 +325,255 @@ class Game {
     }
 
     update() {
-        // Update Moving Platforms
-        if (this.levelData.walls) {
-            this.levelData.walls.forEach(wall => {
-                if (wall.type === 'moving') {
-                    const targetActive = this.activeButtons.has(wall.id || wall.target);
-                    const tx = targetActive ? wall.x2 : wall.x1;
-                    const ty = targetActive ? wall.y2 : wall.y1;
-                    wall.x += (tx - wall.x) * 0.1;
-                    wall.y += (ty - wall.y) * 0.1;
-                }
-            });
-        }
-
-        // Record current run
-        this.recording.push({ x: this.player.x, y: this.player.y });
-        this.frameCount++;
-
-        // Process Input
-        if (this.keys['ArrowLeft'] || this.keys['KeyA']) this.player.vx = -CONFIG.MOVE_SPEED;
-        else if (this.keys['ArrowRight'] || this.keys['KeyD']) this.player.vx = CONFIG.MOVE_SPEED;
-        else this.player.vx = 0;
-
-        if ((this.keys['ArrowUp'] || this.keys['KeyW'] || this.keys['Space']) && this.player.onGround) {
-            this.player.vy = CONFIG.JUMP_FORCE;
-            this.player.onGround = false;
-            this.spawnParticles(this.player.x + this.player.width/2, this.player.y + this.player.height, CONFIG.COLORS.PLAYER, 5);
-        }
-
-        // Apply Gravity
-        this.player.vy += CONFIG.GRAVITY;
-
-        // Apply Velocity and Collision (Horizontal)
-        this.player.x += this.player.vx;
-        this.checkCollisions(true);
-
-        // Apply Velocity and Collision (Vertical)
-        const oldOnGround = this.player.onGround;
-        this.player.y += this.player.vy;
-        this.checkCollisions(false);
+        this.updatePlayer();
+        this.echoes.forEach(e => e.update());
         
-        if (this.player.onGround && !oldOnGround) {
-            this.spawnParticles(this.player.x + this.player.width/2, this.player.y + this.player.height, CONFIG.COLORS.PLAYER, 8);
-        }
-
-        // Update active buttons
+        // Buttons
         this.activeButtons.clear();
-        this.checkButtonTriggers(this.player);
-        
-        // Ghosts also trigger buttons and act as solid platforms
-        this.ghosts.forEach(ghost => {
-            const frameIndex = Math.max(0, Math.min(this.frameCount - 1, ghost.data.length - 1));
-            const ghostPos = ghost.data[frameIndex];
-            const ghostEntity = {
-                x: ghostPos.x,
-                y: ghostPos.y,
-                width: 30,
-                height: 38,
-                w: 30,
-                h: 38
-            };
-            this.checkButtonTriggers(ghostEntity);
-        });
+        this.checkButton(this.player);
+        this.echoes.forEach(e => this.checkButton(e));
 
-        // Check Spikes
+        // Camera
+        this.camera.update(this.player.x, this.player.y, this.levelData.width, 600);
+
+        // Fail conditions
+        if (this.player.y > 700) this.resetLevel();
         if (this.levelData.spikes) {
-            this.levelData.spikes.forEach(spike => {
-                if (this.rectIntersect(this.player, spike)) {
-                    this.failLevel();
-                }
+            this.levelData.spikes.forEach(s => {
+                if (this.rectIntersect(this.player, { x: s.x, y: s.y, width: s.w, height: s.h })) this.resetLevel();
             });
         }
 
-        // Check Goal
-        if (this.rectIntersect(this.player, this.levelData.goal)) {
+        // Goal
+        if (this.rectIntersect(this.player, { ...this.levelData.goal, width: this.levelData.goal.w, height: this.levelData.goal.h })) {
             this.completeLevel();
         }
+    }
 
-        // Fall check
-        if (this.player.y > CONFIG.SCREEN_HEIGHT + 100) {
-            this.failLevel();
+    updatePlayer() {
+        // Horizontal
+        if (this.keys['KeyA'] || this.keys['ArrowLeft']) this.player.vx = -CONFIG.MOVE_SPEED;
+        else if (this.keys['KeyD'] || this.keys['ArrowRight']) this.player.vx = CONFIG.MOVE_SPEED;
+        else this.player.vx *= 0.8;
+
+        // Gravity
+        this.player.vy += CONFIG.GRAVITY;
+
+        // Jump Handling (Coyote + Buffer)
+        if (this.player.onGround) this.player.coyoteTimer = CONFIG.COYOTE_TIME;
+        else this.player.coyoteTimer--;
+
+        if (this.keys['Space'] || this.keys['ArrowUp'] || this.keys['KeyW']) this.player.jumpBuffer = CONFIG.JUMP_BUFFER;
+        else this.player.jumpBuffer--;
+
+        if (this.player.jumpBuffer > 0 && this.player.coyoteTimer > 0) {
+            this.player.vy = CONFIG.JUMP_FORCE;
+            this.player.jumpBuffer = 0;
+            this.player.coyoteTimer = 0;
+            this.spawnParticles(this.player.x + 16, this.player.y + 40, CONFIG.COLORS.PLAYER, 5);
+        }
+
+        // Movement Execution
+        this.player.x += this.player.vx;
+        this.resolveCollisions(true);
+        this.player.y += this.player.vy;
+        this.resolveCollisions(false);
+
+        // Recording
+        if (this.player.isRecording) {
+            this.player.recording.push({ x: this.player.x, y: this.player.y });
         }
     }
 
-    failLevel() {
-        this.stats.deaths++;
-        this.spawnParticles(this.player.x + this.player.width/2, this.player.y + this.player.height/2, CONFIG.COLORS.ACCENT, 20);
-        this.screenShake();
-        this.addGhost();
-        this.resetLevel(false);
-    }
+    resolveCollisions(horizontal) {
+        this.player.onGround = false;
 
-    checkCollisions(horizontal) {
-        // Wall collisions
-        this.levelData.walls.forEach(wall => {
-            if (wall.type === 'moving') {
-                // Moving platforms are always solid
-            } else {
-                const isActive = this.activeButtons.has(wall.id);
-                const isSolid = (wall.type === 'dynamic' ? isActive : !isActive);
-                if (!isSolid) return;
-            }
-
-            if (this.rectIntersect(this.player, wall)) {
-                if (horizontal) {
-                    if (this.player.vx > 0) this.player.x = wall.x - this.player.width;
-                    if (this.player.vx < 0) this.player.x = wall.x + wall.w;
-                    this.player.vx = 0;
-                } else {
-                    if (this.player.vy > 0) {
-                        this.player.y = wall.y - this.player.height;
-                        this.player.onGround = true;
-                    }
-                    if (this.player.vy < 0) {
-                        this.player.y = wall.y + wall.h;
-                        this.player.vy = 0;
-                    }
-                }
+        // Walls
+        this.levelData.walls.forEach(w => {
+            if (w.id && this.activeButtons.has(w.id)) return; // Door open
+            
+            const wallRect = { x: w.x, y: w.y, width: w.w, height: w.h };
+            if (this.rectIntersect(this.player, wallRect)) {
+                this.collideWith(wallRect, horizontal);
             }
         });
 
-        // Ghost collisions (Solid past-selves)
-        this.ghosts.forEach(ghost => {
-            const frameIndex = Math.max(0, Math.min(this.frameCount - 1, ghost.data.length - 1));
-            const pos = ghost.data[frameIndex];
-            const ghostRect = { x: pos.x, y: pos.y, w: 30, h: 38 };
-
-            if (this.rectIntersect(this.player, ghostRect)) {
-                if (horizontal) {
-                    if (this.player.vx > 0) this.player.x = pos.x - this.player.width;
-                    else if (this.player.vx < 0) this.player.x = pos.x + ghostRect.w;
-                    this.player.vx = 0;
-                } else {
-                    if (this.player.vy > 0) {
-                        this.player.y = pos.y - this.player.height;
-                        this.player.onGround = true;
-                    } else if (this.player.vy < 0) {
-                        this.player.y = pos.y + ghostRect.h;
-                        this.player.vy = 0;
-                    }
-                }
+        // Echoes (Solid)
+        this.echoes.forEach(e => {
+            const echoRect = { x: e.x, y: e.y, width: e.width, height: e.height };
+            if (this.rectIntersect(this.player, echoRect)) {
+                this.collideWith(echoRect, horizontal);
             }
         });
     }
 
-    checkButtonTriggers(entity) {
+    collideWith(rect, horizontal) {
+        if (horizontal) {
+            if (this.player.vx > 0) this.player.x = rect.x - this.player.width;
+            else if (this.player.vx < 0) this.player.x = rect.x + rect.width;
+            this.player.vx = 0;
+        } else {
+            if (this.player.vy > 0) {
+                this.player.y = rect.y - this.player.height;
+                this.player.vy = 0;
+                this.player.onGround = true;
+            } else if (this.player.vy < 0) {
+                this.player.y = rect.y + rect.height;
+                this.player.vy = 0;
+            }
+        }
+    }
+
+    checkButton(entity) {
+        if (!this.levelData.buttons) return;
         this.levelData.buttons.forEach(btn => {
-            if (this.rectIntersect(entity, btn)) {
+            const entRect = { x: entity.x, y: entity.y, width: entity.width || entity.w, height: entity.height || entity.h };
+            if (this.rectIntersect(entRect, { x: btn.x, y: btn.y, width: btn.w, height: btn.h })) {
                 this.activeButtons.add(btn.target);
             }
         });
     }
 
-    rectIntersect(r1, r2, tolerance = 0) {
-        return r1.x < r2.x + r2.w + tolerance &&
-               r1.x + (r1.width || r1.w) > r2.x - tolerance &&
-               r1.y < r2.y + r2.h + tolerance &&
-               r1.y + (r1.height || r1.h) > r2.y - tolerance;
+    rectIntersect(r1, r2) {
+        return r1.x < r2.x + r2.width && r1.x + r1.width > r2.x &&
+               r1.y < r2.y + r2.height && r1.y + r1.height > r2.y;
     }
 
     completeLevel() {
-        if (this.currentLevel === this.unlockedLevels) {
-            this.unlockedLevels++;
-        }
-        if (this.currentLevel < 10) {
+        if (this.currentLevel < 2) {
             this.startLevel(this.currentLevel + 1);
         } else {
-            const duration = Math.floor((Date.now() - this.stats.startTime) / 1000);
-            const mins = Math.floor(duration / 60).toString().padStart(2, '0');
-            const secs = (duration % 60).toString().padStart(2, '0');
-            
-            document.getElementById('final-time').textContent = `${mins}:${secs}`;
-            document.getElementById('final-deaths').textContent = this.stats.deaths;
             this.showScreen('clear');
         }
     }
 
-    draw() {
-        this.ctx.save();
-        
-        // Screen Shake
-        if (this.shakeTime > 0) {
-            const intensity = 5;
-            this.ctx.translate(
-                (Math.random() - 0.5) * intensity,
-                (Math.random() - 0.5) * intensity
-            );
-            this.shakeTime--;
-        }
+    spawnParticles(x, y, color, count) {
+        for (let i = 0; i < count; i++) this.particles.push(new Particle(x, y, color));
+    }
 
-        // Clear background
+    togglePause() {
+        this.isPaused = !this.isPaused;
+        document.getElementById('pause-menu').classList.toggle('hidden', !this.isPaused);
+    }
+
+    draw() {
         this.ctx.fillStyle = CONFIG.COLORS.BACKGROUND;
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
-        if (!this.player) {
-            this.ctx.restore();
-            return;
+        // Subtle Grid
+        this.ctx.strokeStyle = 'rgba(0, 242, 255, 0.03)';
+        this.ctx.lineWidth = 1;
+        const offset = -(this.camera.x % 40);
+        for (let x = offset; x < CONFIG.SCREEN_WIDTH; x += 40) {
+            this.ctx.beginPath();
+            this.ctx.moveTo(x, 0);
+            this.ctx.lineTo(x, CONFIG.SCREEN_HEIGHT);
+            this.ctx.stroke();
+        }
+        for (let y = 0; y < CONFIG.SCREEN_HEIGHT; y += 40) {
+            this.ctx.beginPath();
+            this.ctx.moveTo(0, y);
+            this.ctx.lineTo(CONFIG.SCREEN_WIDTH, y);
+            this.ctx.stroke();
         }
 
-        // Draw Buttons
-        this.levelData.buttons.forEach(btn => {
-            const isActive = this.activeButtons.has(btn.target);
-            this.ctx.fillStyle = isActive ? CONFIG.COLORS.BUTTON_ACTIVE : CONFIG.COLORS.BUTTON;
-            
-            if (isActive) {
-                this.ctx.shadowBlur = 15;
-                this.ctx.shadowColor = CONFIG.COLORS.BUTTON_ACTIVE;
+        if (!this.levelData) return;
+
+        this.ctx.save();
+        
+        // Walls
+        this.levelData.walls.forEach(w => {
+            const isOpen = w.id && this.activeButtons.has(w.id);
+            if (isOpen) {
+                this.ctx.strokeStyle = CONFIG.COLORS.DOOR;
+                this.ctx.globalAlpha = 0.3;
+                this.ctx.strokeRect(w.x - this.camera.x, w.y - this.camera.y, w.w, w.h);
+                this.ctx.globalAlpha = 1.0;
+            } else {
+                this.ctx.fillStyle = w.id ? CONFIG.COLORS.DOOR : CONFIG.COLORS.WALL;
+                this.ctx.fillRect(w.x - this.camera.x, w.y - this.camera.y, w.w, w.h);
             }
-            this.ctx.fillRect(btn.x, btn.y, btn.w, btn.h);
-            this.ctx.shadowBlur = 0;
         });
 
-        // Draw Spikes
+        // Spikes
         if (this.levelData.spikes) {
             this.levelData.spikes.forEach(s => {
                 this.ctx.fillStyle = CONFIG.COLORS.SPIKE;
-                this.ctx.shadowBlur = 10;
-                this.ctx.shadowColor = CONFIG.COLORS.SPIKE;
-                
                 this.ctx.beginPath();
-                this.ctx.moveTo(s.x, s.y + s.h);
-                this.ctx.lineTo(s.x + s.w / 2, s.y);
-                this.ctx.lineTo(s.x + s.w, s.y + s.h);
+                this.ctx.moveTo(s.x-this.camera.x, s.y+s.h-this.camera.y);
+                this.ctx.lineTo(s.x+s.w/2-this.camera.x, s.y-this.camera.y);
+                this.ctx.lineTo(s.x+s.w-this.camera.x, s.y+s.h-this.camera.y);
                 this.ctx.fill();
-                
-                this.ctx.shadowBlur = 0;
             });
         }
 
-        // Draw Goal
-        const goal = this.levelData.goal;
-        if (goal) {
-            // Inner glow
-            const goalGlow = this.ctx.createRadialGradient(
-                goal.x + goal.w/2, goal.y + goal.h/2, 5,
-                goal.x + goal.w/2, goal.y + goal.h/2, 40
-            );
-            goalGlow.addColorStop(0, CONFIG.COLORS.GOAL);
-            goalGlow.addColorStop(1, 'transparent');
-            
-            this.ctx.fillStyle = goalGlow;
-            this.ctx.fillRect(goal.x - 20, goal.y - 20, goal.w + 40, goal.h + 40);
-
-            this.ctx.fillStyle = CONFIG.COLORS.GOAL;
-            this.ctx.shadowBlur = 15;
-            this.ctx.shadowColor = CONFIG.COLORS.GOAL;
-            this.ctx.fillRect(goal.x, goal.y, goal.w, goal.h);
-            this.ctx.shadowBlur = 0;
+        // Buttons
+        if (this.levelData.buttons) {
+            this.levelData.buttons.forEach(b => {
+                this.ctx.fillStyle = this.activeButtons.has(b.target) ? CONFIG.COLORS.BUTTON_ACTIVE : CONFIG.COLORS.BUTTON;
+                this.ctx.fillRect(b.x - this.camera.x, b.y - this.camera.y, b.w, b.h);
+            });
         }
 
-        // Draw Walls / Doors / Platforms
-        this.levelData.walls.forEach(wall => {
-            if (wall.id) {
-                const isActive = this.activeButtons.has(wall.id);
-                const isSolid = (wall.type === 'moving' ? true : (wall.type === 'dynamic' ? isActive : !isActive));
-                
-                if (isSolid) {
-                    this.ctx.fillStyle = wall.type === 'dynamic' ? CONFIG.COLORS.PLAYER : CONFIG.COLORS.DOOR;
-                    this.ctx.shadowBlur = 10;
-                    this.ctx.shadowColor = this.ctx.fillStyle;
-                    this.ctx.globalAlpha = 1.0;
-                    this.ctx.fillRect(wall.x, wall.y, wall.w, wall.h);
-                } else {
-                    this.ctx.globalAlpha = 0.2;
-                    this.ctx.strokeStyle = wall.type === 'dynamic' ? CONFIG.COLORS.PLAYER : CONFIG.COLORS.DOOR;
-                    this.ctx.lineWidth = 2;
-                    this.ctx.strokeRect(wall.x, wall.y, wall.w, wall.h);
-                    this.ctx.globalAlpha = 1.0;
-                }
-                this.ctx.shadowBlur = 0;
-            } else {
-                this.ctx.fillStyle = CONFIG.COLORS.WALL;
-                this.ctx.fillRect(wall.x, wall.y, wall.w, wall.h);
-                
-                // Bevel effect
-                this.ctx.strokeStyle = 'rgba(255,255,255,0.05)';
-                this.ctx.strokeRect(wall.x, wall.y, wall.w, wall.h);
-            }
-        });
-
-        // Draw Particles
-        this.particles.forEach((p, i) => {
-            p.update();
-            p.draw(this.ctx);
-            if (p.life <= 0) this.particles.splice(i, 1);
-        });
-
-        // Draw Ghosts
-        this.ghosts.forEach(ghost => {
-            const frameIndex = Math.max(0, Math.min(this.frameCount - 1, ghost.data.length - 1));
-            const pos = ghost.data[frameIndex];
-            const color = ghost.color;
-            
-            // Draw path end marker
-            const finalPos = ghost.data[ghost.data.length - 1];
-            this.ctx.strokeStyle = color;
-            this.ctx.setLineDash([5, 5]);
-            this.ctx.strokeRect(finalPos.x - 2, finalPos.y - 2, this.player.width + 4, this.player.height + 4);
-            this.ctx.setLineDash([]);
-
-            // Fade out ghosts at the end of their recording
-            const isEnding = this.frameCount > ghost.data.length - 30;
-            const alpha = isEnding ? Math.max(0, (ghost.data.length - this.frameCount) / 30) : 1.0;
-            
-            this.ctx.globalAlpha = alpha * 0.4;
-            this.ctx.fillStyle = color;
-            this.ctx.shadowBlur = 15;
-            this.ctx.shadowColor = color;
-            this.ctx.fillRect(pos.x, pos.y, this.player.width, this.player.height);
-            this.ctx.shadowBlur = 0;
-            this.ctx.globalAlpha = 1.0;
-        });
-
-        // Draw Player
-        this.ctx.fillStyle = CONFIG.COLORS.PLAYER;
+        // Goal
+        const g = this.levelData.goal;
+        this.ctx.fillStyle = CONFIG.COLORS.GOAL;
         this.ctx.shadowBlur = 20;
-        this.ctx.shadowColor = CONFIG.COLORS.PLAYER_GLOW;
-        this.ctx.fillRect(this.player.x, this.player.y, this.player.width, this.player.height);
+        this.ctx.shadowColor = CONFIG.COLORS.GOAL;
+        this.ctx.fillRect(g.x - this.camera.x, g.y - this.camera.y, g.w, g.h);
         this.ctx.shadowBlur = 0;
 
-        // Scanline effect
-        this.ctx.fillStyle = 'rgba(255,255,255,0.015)';
-        for(let i=0; i<CONFIG.SCREEN_HEIGHT; i+=4) {
-            this.ctx.fillRect(0, i, CONFIG.SCREEN_WIDTH, 1);
-        }
+        // Echoes
+        this.echoes.forEach(e => e.draw(this.ctx, this.camera));
 
-        // Draw Pause overlay
-        if (this.isPaused) {
-            this.ctx.fillStyle = 'rgba(0,0,0,0.6)';
-            this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        // Player
+        this.ctx.fillStyle = CONFIG.COLORS.PLAYER;
+        if (this.player.isRecording) {
+            this.ctx.shadowBlur = 15;
+            this.ctx.shadowColor = '#ff00ff';
+            this.ctx.strokeStyle = '#ff00ff';
+            this.ctx.lineWidth = 2;
+            this.ctx.strokeRect(this.player.x - this.camera.x - 2, this.player.y - this.camera.y - 2, 36, 46);
+        } else {
+             this.ctx.shadowBlur = 15;
+             this.ctx.shadowColor = CONFIG.COLORS.PLAYER;
         }
+        this.ctx.fillRect(this.player.x - this.camera.x, this.player.y - this.camera.y, this.player.width, this.player.height);
+        this.ctx.shadowBlur = 0;
+
+        // Particles
+        this.particles = this.particles.filter(p => p.life > 0);
+        this.particles.forEach(p => {
+            p.update();
+            p.draw(this.ctx, this.camera);
+        });
+
+        // Hints
+        this.ctx.fillStyle = 'rgba(255,255,255,0.6)';
+        this.ctx.font = '16px Outfit';
+        this.levelData.hints.forEach(h => {
+            this.ctx.fillText(h.text, h.x - this.camera.x, h.y - this.camera.y);
+        });
 
         this.ctx.restore();
+
+        // UI Overlay
+        this.drawUI();
+    }
+
+    drawUI() {
+        // Echo Count
+        this.ctx.fillStyle = 'white';
+        this.ctx.font = '700 14px Outfit';
+        this.ctx.fillText(`SECTOR: ${this.currentLevel === 0 ? 'T' : this.currentLevel}`, 20, 30);
+        this.ctx.fillText(`ECHOES: ${this.echoes.length}/${CONFIG.MAX_ECHOES}`, 20, 50);
+        
+        if (this.player.isRecording) {
+            this.ctx.fillStyle = '#ff00ff';
+            this.ctx.fillText('PHASE RECORDING...', 20, 70);
+        }
     }
 }
 
-// Start Game
-window.onload = () => {
-    new Game();
-};
+window.onload = () => new Game();
+

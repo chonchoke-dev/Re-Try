@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Re:Try | Puzzle-Action Game</title>
+    <title>ECHO RUN | Phase. Teleport. Platforms.</title>
     <link rel="stylesheet" href="style.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -13,8 +13,8 @@
     <div id="game-container">
         <!-- Title Screen -->
         <div id="title-screen" class="screen">
-            <h1 class="glitch" data-text="RE:TRY">RE:TRY</h1>
-            <p class="subtitle">FAILURE IS A TOOL</p>
+            <h1 class="glitch">ECHO RUN</h1>
+            <p class="subtitle">BREAK THE LOOP</p>
             <button id="start-btn" class="neon-btn">INITIALIZE</button>
         </div>
 
@@ -24,17 +24,12 @@
             <div id="level-grid">
                 <!-- Levels will be injected here -->
             </div>
-            <button id="back-to-title" class="text-btn">BACK</button>
+            <button id="back-to-title" class="text-btn">RETURN</button>
         </div>
 
         <!-- Game Screen -->
         <div id="game-screen" class="screen hidden">
             <canvas id="game-canvas"></canvas>
-            <div id="game-ui">
-                <div class="level-info">SECTOR: <span id="current-level-id">1</span></div>
-                <div class="ghost-info">GHOSTS: <span id="ghost-count">0</span>/3</div>
-                <div class="controls-hint">[R] RETRY | [E/SPACE] ECHO | [WASD] MOVE</div>
-            </div>
             <div id="pause-menu" class="hidden">
                 <h3>MODULE PAUSED</h3>
                 <button id="resume-btn" class="neon-btn">RESUME</button>
@@ -44,15 +39,12 @@
         </div>
 
         <div id="clear-screen" class="screen hidden">
-            <h1 class="glitch" data-text="MISSION COMPLETE">MISSION COMPLETE</h1>
-            <p class="subtitle">ALL SECTORS SECURED</p>
-            <div class="final-stats">
-                <p>TOTAL TIME: <span id="final-time">00:00</span></p>
-                <p>TOTAL ATTEMPTS: <span id="final-deaths">0</span></p>
-            </div>
+            <h1 class="glitch">SYSTEM CLEAR</h1>
+            <p class="subtitle">ALL DATA CORES SECURED</p>
             <button id="return-to-title-btn" class="neon-btn">RETURN TO BASE</button>
         </div>
     </div>
     <script src="script.js"></script>
 </body>
 </html>
+
