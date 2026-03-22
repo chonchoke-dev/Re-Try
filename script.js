@@ -433,7 +433,7 @@ class Game {
         
         // Ghosts also trigger buttons and act as solid platforms
         this.ghosts.forEach(ghost => {
-            const frameIndex = Math.min(this.frameCount - 1, ghost.data.length - 1);
+            const frameIndex = Math.max(0, Math.min(this.frameCount - 1, ghost.data.length - 1));
             const ghostPos = ghost.data[frameIndex];
             const ghostEntity = {
                 x: ghostPos.x,
@@ -505,7 +505,7 @@ class Game {
 
         // Ghost collisions (Solid past-selves)
         this.ghosts.forEach(ghost => {
-            const frameIndex = Math.min(this.frameCount - 1, ghost.data.length - 1);
+            const frameIndex = Math.max(0, Math.min(this.frameCount - 1, ghost.data.length - 1));
             const pos = ghost.data[frameIndex];
             const ghostRect = { x: pos.x, y: pos.y, w: 30, h: 38 };
 
@@ -671,7 +671,7 @@ class Game {
 
         // Draw Ghosts
         this.ghosts.forEach(ghost => {
-            const frameIndex = Math.min(this.frameCount - 1, ghost.data.length - 1);
+            const frameIndex = Math.max(0, Math.min(this.frameCount - 1, ghost.data.length - 1));
             const pos = ghost.data[frameIndex];
             const color = ghost.color;
             
