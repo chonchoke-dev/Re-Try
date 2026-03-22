@@ -1,0 +1,252 @@
+:root {
+    --bg-color: #050508;
+    --player-color: #00f2ff;
+    --ghost-color: rgba(0, 242, 255, 0.4);
+    --ghost-glow: rgba(0, 242, 255, 0.2);
+    --accent-color: #ff0055;
+    --door-color: #ffcc00;
+    --button-color: #333;
+    --goal-color: #00ff66;
+    --text-color: #ffffff;
+    --font-main: 'Outfit', sans-serif;
+    --glass-bg: rgba(15, 15, 26, 0.7);
+    --glass-border: rgba(255, 255, 255, 0.1);
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    font-family: var(--font-main);
+    overflow: hidden;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+}
+
+#game-container {
+    position: relative;
+    width: 800px;
+    height: 600px;
+    background: #0a0a0f;
+    border: 2px solid #1a1a2e;
+    box-shadow: 0 0 50px rgba(0, 0, 0, 0.5);
+    overflow: hidden;
+}
+
+.screen {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    background: radial-gradient(circle at center, #0f0f1a 0%, #050508 100%);
+    transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+    z-index: 10;
+}
+
+.hidden {
+    display: none !important;
+    opacity: 0;
+    pointer-events: none;
+}
+
+/* Title Screen */
+h1.glitch {
+    font-size: 5rem;
+    font-weight: 700;
+    letter-spacing: 0.5rem;
+    color: var(--player-color);
+    text-shadow: 0 0 20px rgba(0, 242, 255, 0.5);
+    margin-bottom: 0;
+    animation: glitch 3s infinite;
+}
+
+@keyframes glitch {
+    0% { transform: translate(0); }
+    1% { transform: translate(-2px, 2px); }
+    2% { transform: translate(2px, -2px); }
+    3% { transform: translate(0); }
+    100% { transform: translate(0); }
+}
+
+.subtitle {
+    font-weight: 300;
+    letter-spacing: 0.3rem;
+    color: var(--accent-color);
+    margin-bottom: 3rem;
+}
+
+/* Buttons */
+.neon-btn {
+    background: transparent;
+    border: 2px solid var(--player-color);
+    color: var(--player-color);
+    padding: 1rem 3.5rem;
+    font-size: 1.1rem;
+    font-family: var(--font-main);
+    font-weight: 700;
+    letter-spacing: 0.3rem;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    box-shadow: 0 0 15px rgba(0, 242, 255, 0.1);
+    margin-bottom: 1rem;
+    position: relative;
+    overflow: hidden;
+    text-transform: uppercase;
+}
+
+.neon-btn::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+    transition: 0.5s;
+}
+
+.neon-btn:hover::before {
+    left: 100%;
+}
+
+.neon-btn:hover {
+    background: var(--player-color);
+    color: var(--bg-color);
+    box-shadow: 0 0 40px rgba(0, 242, 255, 0.5);
+    transform: translateY(-3px) scale(1.02);
+}
+
+.text-btn {
+    background: none;
+    border: none;
+    color: #888;
+    font-family: var(--font-main);
+    font-size: 0.9rem;
+    letter-spacing: 0.1rem;
+    cursor: pointer;
+    transition: all 0.3s;
+    margin-top: 1rem;
+    text-transform: uppercase;
+}
+
+.text-btn:hover {
+    color: var(--player-color);
+    text-shadow: 0 0 10px var(--player-color);
+}
+
+/* Level Select */
+#level-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.level-btn {
+    width: 60px;
+    height: 60px;
+    background: #111;
+    border: 1px solid #333;
+    color: #666;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.level-btn.unlocked {
+    border-color: var(--player-color);
+    color: var(--player-color);
+}
+
+.level-btn.unlocked:hover {
+    background: var(--player-color);
+    color: var(--bg-color);
+    box-shadow: 0 0 15px var(--player-color);
+}
+
+/* Game Canvas & UI */
+#game-canvas {
+    background: #07070a;
+}
+
+#game-ui {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    padding: 1.5rem;
+    display: flex;
+    justify-content: space-between;
+    pointer-events: none;
+    text-shadow: 0 0 5px rgba(0,0,0,0.8);
+}
+
+.level-info, .ghost-info {
+    font-weight: 700;
+    font-size: 0.9rem;
+    letter-spacing: 0.1rem;
+}
+
+.controls-hint {
+    position: absolute;
+    bottom: 1.5rem;
+    right: 1.5rem;
+    font-size: 0.8rem;
+    color: #444;
+}
+
+#current-level-id, #ghost-count {
+    color: var(--player-color);
+}
+
+/* Pause Menu */
+#pause-menu {
+    position: absolute;
+    background: var(--glass-bg);
+    backdrop-filter: blur(15px);
+    -webkit-backdrop-filter: blur(15px);
+    padding: 3.5rem;
+    border: 1px solid var(--glass-border);
+    border-radius: 12px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+    z-index: 100;
+}
+
+#pause-menu h3 {
+    margin-bottom: 2rem;
+    letter-spacing: 0.4rem;
+    color: var(--player-color);
+}
+
+#level-select h2 {
+    margin-bottom: 2.5rem;
+    letter-spacing: 0.5rem;
+    color: var(--player-color);
+    font-weight: 300;
+}
+
+#clear-screen {
+    background: radial-gradient(circle at center, #001a1a 0%, #050508 100%);
+}
+
+#clear-screen .subtitle {
+    color: var(--goal-color);
+}

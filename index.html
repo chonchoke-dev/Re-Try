@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Re:Try | Puzzle-Action Game</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div id="game-container">
+        <!-- Title Screen -->
+        <div id="title-screen" class="screen">
+            <h1 class="glitch" data-text="RE:TRY">RE:TRY</h1>
+            <p class="subtitle">FAILURE IS A TOOL</p>
+            <button id="start-btn" class="neon-btn">INITIALIZE</button>
+        </div>
+
+        <!-- Level Select -->
+        <div id="level-select" class="screen hidden">
+            <h2>SELECT SECTOR</h2>
+            <div id="level-grid">
+                <!-- Levels will be injected here -->
+            </div>
+            <button id="back-to-title" class="text-btn">BACK</button>
+        </div>
+
+        <!-- Game Screen -->
+        <div id="game-screen" class="screen hidden">
+            <canvas id="game-canvas"></canvas>
+            <div id="game-ui">
+                <div class="level-info">SECTOR: <span id="current-level-id">1</span></div>
+                <div class="ghost-info">GHOSTS: <span id="ghost-count">0</span>/3</div>
+                <div class="controls-hint">[R] RETRY | [WASD] MOVE</div>
+            </div>
+            <div id="pause-menu" class="hidden">
+                <h3>MODULE PAUSED</h3>
+                <button id="resume-btn" class="neon-btn">RESUME</button>
+                <button id="restart-level-btn" class="text-btn">RESTART SECTOR</button>
+                <button id="quit-to-select" class="text-btn">EXIT TO MAP</button>
+            </div>
+        </div>
+
+        <!-- Game Clear Screen -->
+        <div id="clear-screen" class="screen hidden">
+            <h1 class="glitch" data-text="MISSION COMPLETE">MISSION COMPLETE</h1>
+            <p class="subtitle">ALL SECTORS SECURED</p>
+            <button id="return-to-title-btn" class="neon-btn">RETURN TO BASE</button>
+        </div>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>
