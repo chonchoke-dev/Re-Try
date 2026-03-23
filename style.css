@@ -198,3 +198,107 @@ h1.glitch {
     font-weight: 700;
 }
 
+/* Mobile Controls */
+#mobile-controls {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 50;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    padding: 2rem;
+}
+
+#mobile-controls.hidden {
+    display: none !important;
+}
+
+.control-group {
+    display: flex;
+    gap: 1.5rem;
+    pointer-events: auto;
+}
+
+.touch-btn {
+    width: 70px;
+    height: 70px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(0, 242, 255, 0.3);
+    border-radius: 50%;
+    color: var(--player-color);
+    font-size: 1.5rem;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    cursor: pointer;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    backdrop-filter: blur(10px);
+    transition: all 0.2s;
+}
+
+.touch-btn:active {
+    background: var(--player-color);
+    color: var(--bg-color);
+    transform: scale(0.9);
+}
+
+.phase-btn {
+    border-color: var(--echo-color);
+    color: var(--echo-color);
+    font-size: 0.8rem;
+    font-weight: 700;
+}
+
+.phase-btn:active {
+    background: var(--echo-color);
+}
+
+.pause-btn {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    width: 50px;
+    height: 50px;
+    border-radius: 8px;
+    pointer-events: auto;
+}
+
+/* Responsive Scaling */
+@media (max-width: 850px) {
+    #game-container {
+        width: 100vw;
+        height: 75vw; /* 800/600 = 4/3 */
+        border: none;
+        border-radius: 0;
+    }
+    
+    #game-canvas {
+        width: 100% !important;
+        height: 100% !important;
+    }
+
+    h1.glitch {
+        font-size: 3rem;
+        letter-spacing: 0.5rem;
+    }
+    
+    .neon-btn {
+        padding: 1rem 2rem;
+        font-size: 0.8rem;
+    }
+
+    .touch-btn {
+        width: 60px;
+        height: 60px;
+    }
+    
+    #mobile-controls {
+        padding: 1rem;
+    }
+}
+

@@ -12,7 +12,7 @@ const CONFIG = {
     MOVE_SPEED: 4.8,
     COYOTE_TIME: 6, // Frames
     JUMP_BUFFER: 8, // Frames
-    MAX_ECHOES: 4,
+    MAX_ECHOES: 6,
     COLORS: {
         BACKGROUND: '#050508',
         PLAYER: '#00f2ff',
@@ -170,6 +170,9 @@ class Game {
         this.keys = {};
         this.activeButtons = new Set();
         this.shakeTime = 0;
+        this.isMobile = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+        this.isGoalReached = false;
+        this.goalTimer = 0;
 
         this.init();
     }
@@ -198,7 +201,7 @@ class Game {
         document.getElementById('return-to-title-btn').onclick = () => this.showScreen('title');
         
         document.getElementById('next-level-btn').onclick = () => {
-            if (this.currentLevel < 2) {
+            if (this.currentLevel < 3) {
                 this.startLevel(this.currentLevel + 1);
             } else {
                 this.showScreen('clear');
@@ -206,16 +209,52 @@ class Game {
         };
         document.getElementById('level-clear-to-select').onclick = () => this.showScreen('levelSelect');
 
+        this.initTouchControls();
         this.renderLevelGrid();
         this.showScreen('title');
         
         requestAnimationFrame(() => this.loop());
     }
 
+    initTouchControls() {
+        if (!this.isMobile) return;
+        document.getElementById('mobile-controls').classList.remove('hidden');
+
+        const addTouchBtn = (id, key) => {
+            const btn = document.getElementById(id);
+            btn.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                this.keys[key] = true;
+            });
+            btn.addEventListener('touchend', (e) => {
+                e.preventDefault();
+                this.keys[key] = false;
+                if (key === 'ShiftLeft') this.handlePhase();
+                if (key === 'Escape') this.togglePause();
+            });
+        };
+
+        addTouchBtn('btn-left', 'KeyA');
+        addTouchBtn('btn-right', 'KeyD');
+        addTouchBtn('btn-jump', 'Space');
+        addTouchBtn('btn-phase', 'ShiftLeft');
+        addTouchBtn('btn-pause', 'Escape');
+    }
+
     showScreen(screenId) {
         Object.keys(this.screens).forEach(key => this.screens[key].classList.add('hidden'));
         this.screens[screenId].classList.remove('hidden');
         if (screenId === 'levelSelect') this.renderLevelGrid();
+        
+        // Hide mobile controls on UI screens
+        if (this.isMobile) {
+            const mobileControls = document.getElementById('mobile-controls');
+            if (screenId === 'game') {
+                mobileControls.classList.remove('hidden');
+            } else {
+                mobileControls.classList.add('hidden');
+            }
+        }
     }
 
     renderLevelGrid() {
@@ -233,9 +272,10 @@ class Game {
     startLevel(id) {
         this.currentLevel = id;
         this.echoes = [];
+        this.isGoalReached = false;
+        this.goalTimer = 0;
         this.resetLevel();
         this.showScreen('game');
-        document.getElementById('current-level-id').textContent = id === 0 ? 'Tutorial' : id;
     }
 
     resetLevel() {
@@ -366,6 +406,14 @@ class Game {
     }
 
     update() {
+        if (this.isGoalReached) {
+            this.goalTimer--;
+            if (this.goalTimer <= 0) {
+                this.showLevelClearScreen();
+            }
+            return;
+        }
+
         this.updatePlayer();
         this.echoes.forEach(e => e.update());
         
@@ -485,18 +533,24 @@ class Game {
     }
 
     completeLevel() {
+        if (this.isGoalReached) return;
+        this.isGoalReached = true;
+        this.goalTimer = 90; // 1.5 seconds at 60fps
+        this.spawnParticles(this.player.x + 16, this.player.y + 21, CONFIG.COLORS.GOAL, 30);
+    }
+
+    showLevelClearScreen() {
         if (this.currentLevel >= 0 && this.currentLevel <= 3) {
-             // Show Level Clear Screen
              const idText = this.currentLevel === 0 ? 'Tutorial' : this.currentLevel;
              document.getElementById('cleared-sector-id').textContent = idText;
              
-             // Update buttons
+             const nextBtn = document.getElementById('next-level-btn');
              if (this.currentLevel === 3) {
-                 document.getElementById('next-level-btn').textContent = 'COMPLETE ALL DATA CORES';
-                 document.getElementById('next-level-btn').onclick = () => this.showScreen('clear');
+                 nextBtn.textContent = 'COMPLETE ALL DATA CORES';
+                 nextBtn.onclick = () => this.showScreen('clear');
              } else {
-                 document.getElementById('next-level-btn').textContent = 'PROCEED TO NEXT SECTOR';
-                 document.getElementById('next-level-btn').onclick = () => this.startLevel(this.currentLevel + 1);
+                 nextBtn.textContent = 'PROCEED TO NEXT SECTOR';
+                 nextBtn.onclick = () => this.startLevel(this.currentLevel + 1);
              }
              
              this.showScreen('levelClear');
@@ -634,6 +688,15 @@ class Game {
         });
 
         this.ctx.restore();
+
+        // Goal Text
+        if (this.isGoalReached) {
+            this.ctx.fillStyle = 'rgba(0, 255, 136, ' + (Math.min(1, this.goalTimer / 30)) + ')';
+            this.ctx.font = '700 80px Outfit';
+            this.ctx.textAlign = 'center';
+            this.ctx.fillText('GOAL!', CONFIG.SCREEN_WIDTH / 2, CONFIG.SCREEN_HEIGHT / 2);
+            this.ctx.textAlign = 'left';
+        }
 
         // UI Overlay
         this.drawUI();

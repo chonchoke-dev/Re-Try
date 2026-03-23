@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>ECHO RUN | Phase. Teleport. Platforms.</title>
     <link rel="stylesheet" href="style.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -30,6 +30,19 @@
         <!-- Game Screen -->
         <div id="game-screen" class="screen hidden">
             <canvas id="game-canvas"></canvas>
+            
+            <div id="mobile-controls" class="hidden">
+                <div class="control-group d-pad">
+                    <button id="btn-left" class="touch-btn"></button>
+                    <button id="btn-right" class="touch-btn"></button>
+                </div>
+                <div class="control-group actions">
+                    <button id="btn-phase" class="touch-btn phase-btn">PHASE</button>
+                    <button id="btn-jump" class="touch-btn jump-btn">JUMP</button>
+                </div>
+                <button id="btn-pause" class="touch-btn pause-btn"></button>
+            </div>
+
             <div id="pause-menu" class="hidden">
                 <h3>MODULE PAUSED</h3>
                 <button id="resume-btn" class="neon-btn">RESUME</button>
@@ -39,8 +52,8 @@
         </div>
 
         <div id="level-clear-screen" class="screen hidden">
-            <h1 class="glitch">SECTOR SECURED</h1>
-            <p class="subtitle">DATA CORE ACCESSED</p>
+            <h1 class="glitch">GOAL!</h1>
+            <p class="subtitle">SECTOR SECURED</p>
             <div class="final-stats">
                 <p>SECTOR: <span id="cleared-sector-id">-</span></p>
             </div>
