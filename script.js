@@ -286,69 +286,73 @@ class Echo {
 
 class Game {
     constructor() {
-        this.canvas = document.getElementById('game-canvas');
-        this.ctx = this.canvas.getContext('2d');
-        
-        // Fixed internal resolution
-        this.baseWidth = 1200;
-        this.baseHeight = 600;
-        this.canvas.width = this.baseWidth;
-        this.canvas.height = this.baseHeight;
-        
-        this.screens = {
-            title: document.getElementById('title-screen'),
-            levelSelect: document.getElementById('level-select'),
-            game: document.getElementById('game-screen'),
-            levelClear: document.getElementById('level-clear-screen'),
-            clear: document.getElementById('clear-screen'),
-            characterSelect: document.getElementById('character-select'),
-            howToPlay: document.getElementById('how-to-play')
-        };
+        try {
+            this.canvas = document.getElementById('game-canvas');
+            this.ctx = this.canvas.getContext('2d');
+            
+            // Fixed internal resolution
+            this.baseWidth = 1200;
+            this.baseHeight = 600;
+            this.canvas.width = this.baseWidth;
+            this.canvas.height = this.baseHeight;
+            
+            this.screens = {
+                title: document.getElementById('title-screen'),
+                levelSelect: document.getElementById('level-select'),
+                game: document.getElementById('game-screen'),
+                levelClear: document.getElementById('level-clear-screen'),
+                clear: document.getElementById('clear-screen'),
+                characterSelect: document.getElementById('character-select'),
+                howToPlay: document.getElementById('how-to-play')
+            };
 
-        this.deaths = 0;
-        this.levelTimer = 0;
-        this.gameData = this.loadData();
-        
-        // Transitions
-        this.fadeAlpha = 0;
-        this.fadeTarget = null;
-        this.isFading = false;
-        this.currentScreen = 'title'; // Keep track of current screen for fade logic
-        this.unlockedLevels = 1;
-        this.isPaused = false;
-        this.selectedCharId = 'cube';
-        
-        this.player = {
-            x: 0, y: 0, vx: 0, vy: 0, width: 32, height: 42,
-            renderW: 32, renderH: 42, // Squash and Stretch
-            shape: 'square',
-            maxEchoes: 6,
-            moveSpeed: 4.8,
-            jumpForce: -11,
-            onGround: false,
-            wasOnGround: false,
-            coyoteTimer: 0,
-            jumpBuffer: 0,
-            isRecording: false,
-            recording: [],
-            recordStartX: 0,
-            recordStartY: 0,
-            trail: []
-        };
+            this.deaths = 0;
+            this.levelTimer = 0;
+            this.gameData = this.loadData();
+            
+            // Transitions
+            this.fadeAlpha = 0;
+            this.fadeTarget = null;
+            this.isFading = false;
+            this.currentScreen = 'title'; // Keep track of current screen for fade logic
+            this.unlockedLevels = 1;
+            this.isPaused = false;
+            this.selectedCharId = 'cube';
+            
+            this.player = {
+                x: 0, y: 0, vx: 0, vy: 0, width: 32, height: 42,
+                renderW: 32, renderH: 42, // Squash and Stretch
+                shape: 'square',
+                maxEchoes: 6,
+                moveSpeed: 4.8,
+                jumpForce: -11,
+                onGround: false,
+                wasOnGround: false,
+                coyoteTimer: 0,
+                jumpBuffer: 0,
+                isRecording: false,
+                recording: [],
+                recordStartX: 0,
+                recordStartY: 0,
+                trail: []
+            };
 
-        this.echoes = [];
-        this.levelData = null;
-        this.particles = [];
-        this.keys = {};
-        this.activeButtons = new Set();
-        this.shakeTime = 0;
-        this.isMobile = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-        this.isGoalReached = false;
-        this.goalTimer = 0;
-        this.turrets = [];
-        this.projectiles = [];
+            this.echoes = [];
+            this.levelData = null;
+            this.particles = [];
+            this.keys = {};
+            this.activeButtons = new Set();
+            this.shakeTime = 0;
+            this.isMobile = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+            this.isGoalReached = false;
+            this.goalTimer = 0;
+            this.turrets = [];
+            this.projectiles = [];
 
-        this.init();
+            this.init();
+        } catch (e) {
+            console.error("Game Initialization Failed", e);
+        }
     }
 
     init() {
@@ -361,11 +365,11 @@ class Game {
         });
         window.addEventListener('keyup', (e) => this.keys[e.code] = false);
 
-        document.getElementById('start-btn').onclick = () => this.showScreen('characterSelect');
-        document.getElementById('how-to-play-btn').onclick = () => this.showScreen('howToPlay');
-        document.getElementById('back-from-how-to').onclick = () => this.showScreen('title');
-        document.getElementById('back-to-title').onclick = () => this.showScreen('title');
-        document.getElementById('back-to-title-2').onclick = () => this.showScreen('title');
+        this.safeClick('start-btn', () => this.showScreen('characterSelect'));
+        this.safeClick('how-to-play-btn', () => this.showScreen('howToPlay'));
+        this.safeClick('back-from-how-to', () => this.showScreen('title'));
+        this.safeClick('back-to-title', () => this.showScreen('title'));
+        this.safeClick('back-to-title-2', () => this.showScreen('title'));
         
         // Character Selection
         const charCards = document.querySelectorAll('.char-card');
@@ -377,38 +381,43 @@ class Game {
             };
         });
 
-        document.getElementById('confirm-char-btn').onclick = () => {
+        this.safeClick('confirm-char-btn', () => {
             this.applyCharacterStats();
             this.showScreen('levelSelect');
-        };
+        });
 
-        document.getElementById('resume-btn').onclick = () => this.togglePause();
-        document.getElementById('restart-level-btn').onclick = () => {
+        this.safeClick('resume-btn', () => this.togglePause());
+        this.safeClick('restart-level-btn', () => {
             if (this.isPaused) this.togglePause();
             this.resetLevel();
-        };
-        document.getElementById('quit-to-select').onclick = () => {
+        });
+        this.safeClick('quit-to-select', () => {
              if (this.isPaused) this.togglePause();
             this.showScreen('levelSelect');
-        };
-        document.getElementById('return-to-title-btn').onclick = () => this.showScreen('title');
+        });
+        this.safeClick('return-to-title-btn', () => this.showScreen('title'));
+        this.safeClick('return-to-hub-btn', () => this.showScreen('title'));
         
-        document.getElementById('next-level-btn').onclick = () => {
+        this.safeClick('next-level-btn', () => {
             if (this.currentLevel < 7) {
                 this.startLevel(this.currentLevel + 1);
             } else {
                 this.showScreen('clear');
             }
-        };
-        document.getElementById('level-clear-to-select').onclick = () => this.showScreen('levelSelect');
+        });
 
         this.initTouchControls();
         this.handleResize();
         window.addEventListener('resize', () => this.handleResize());
         this.renderLevelGrid();
-        this.showScreen('title');
+        this.currentScreen = 'title';
         
         requestAnimationFrame(() => this.loop());
+    }
+
+    safeClick(id, callback) {
+        const el = document.getElementById(id);
+        if (el) el.onclick = callback;
     }
 
     handleResize() {
@@ -471,8 +480,13 @@ class Game {
     }
 
     loadData() {
-        const saved = localStorage.getItem('echoRun_v1');
-        return saved ? JSON.parse(saved) : { unlocked: [0], grades: {} };
+        try {
+            const saved = localStorage.getItem('echoRun_v1');
+            return saved ? JSON.parse(saved) : { unlocked: [0], grades: {} };
+        } catch (e) {
+            console.error("Save Data Corrupted", e);
+            return { unlocked: [0], grades: {} };
+        }
     }
 
     showScreen(screenId) {
@@ -483,7 +497,9 @@ class Game {
     }
 
     executeScreenSwitch(screenId) {
-        Object.values(this.screens).forEach(s => s.classList.add('hidden'));
+        for (const s of Object.values(this.screens)) {
+            if (s) s.classList.add('hidden');
+        }
         if (this.screens[screenId]) {
             this.screens[screenId].classList.remove('hidden');
         }
@@ -497,8 +513,8 @@ class Game {
                 helpOverlay.classList.remove('hidden');
                 helpOverlay.style.opacity = '1';
                 setTimeout(() => {
-                    if (this.screens.game.classList.contains('hidden')) return;
-                    helpOverlay.style.opacity = '0';
+                    if (this.screens.game && this.screens.game.classList.contains('hidden')) return;
+                    if (helpOverlay) helpOverlay.style.opacity = '0';
                 }, 5000);
             }
         } else if (helpOverlay) {
@@ -509,10 +525,12 @@ class Game {
         // Hide mobile controls on UI screens
         if (this.isMobile) {
             const mobileControls = document.getElementById('mobile-controls');
-            if (screenId === 'game') {
-                mobileControls.classList.remove('hidden');
-            } else {
-                mobileControls.classList.add('hidden');
+            if (mobileControls) {
+                if (screenId === 'game') {
+                    mobileControls.classList.remove('hidden');
+                } else {
+                    mobileControls.classList.add('hidden');
+                }
             }
         }
     }
@@ -1144,6 +1162,14 @@ class Game {
     }
 
     draw() {
+        // Transitions (Top Layer)
+        if (this.fadeAlpha > 0) {
+            this.ctx.save();
+            this.ctx.fillStyle = `rgba(0,0,0,${this.fadeAlpha})`;
+            this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+            this.ctx.restore();
+        }
+
         if (this.shakeTime > 0) {
             this.ctx.save();
             this.ctx.translate((Math.random() - 0.5) * 8, (Math.random() - 0.5) * 8);
@@ -1340,12 +1366,6 @@ class Game {
         // UI Overlay
         this.drawUI();
         
-        // Transitions
-        if (this.fadeAlpha > 0) {
-            this.ctx.fillStyle = `rgba(0,0,0,${this.fadeAlpha})`;
-            this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-        }
-
         if (this.player.isRecording && Math.random() > 0.9) this.ctx.restore(); // Restore glitch
         if (this.shakeTime > 0) this.ctx.restore();
     }
@@ -1407,5 +1427,15 @@ class Game {
     }
 }
 
-window.onload = () => new Game();
+function startGame() {
+    if (!window.gameInstance) {
+        window.gameInstance = new Game();
+    }
+}
+
+if (document.readyState === 'complete') {
+    startGame();
+} else {
+    window.addEventListener('load', startGame);
+}
 
