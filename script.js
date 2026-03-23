@@ -29,8 +29,108 @@ const CONFIG = {
         PARTICLE_PLAYER: '#00f2ff',
         PARTICLE_ECHO: '#ff00ff'
     },
-    ECHO_PALETTE: ['#ff00ff', '#00ff88', '#0099ff', '#ffaa00', '#ff0055']
+    ECHO_PALETTE: ['#ff00ff', '#00ff88', '#0099ff', '#ffaa00', '#ff0055'],
+    TURRET_COOLDOWN: 120, // Frames
+    PROJECTILE_SPEED: 6
 };
+
+class Projectile {
+    constructor(x, y, vx, vy) {
+        this.x = x;
+        this.y = y;
+        this.vx = vx;
+        this.vy = vy;
+        this.width = 12;
+        this.height = 12;
+        this.color = '#ff0044';
+        this.life = 300; // Max frames
+    }
+
+    update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        this.life--;
+    }
+
+    draw(ctx, camera) {
+        ctx.fillStyle = this.color;
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = this.color;
+        ctx.beginPath();
+        ctx.arc(this.x - camera.x + 6, this.y - camera.y + 6, 6, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+    }
+}
+
+class Turret {
+    constructor(x, y, dirX, dirY, type = 'fixed') {
+        this.x = x;
+        this.y = y;
+        this.dirX = dirX;
+        this.dirY = dirY;
+        this.type = type; // 'fixed' or 'tracking'
+        this.width = 40;
+        this.height = 40;
+        this.cooldown = Math.random() * CONFIG.TURRET_COOLDOWN;
+        this.laserActive = false;
+    }
+
+    update(game) {
+        if (this.type === 'tracking') {
+            const dx = game.player.x + 16 - (this.x + 20);
+            const dy = game.player.y + 21 - (this.y + 20);
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist < 600) { // Tracking range
+                this.dirX = dx / dist;
+                this.dirY = dy / dist;
+            }
+        }
+
+        this.cooldown--;
+        this.laserActive = this.cooldown < 45;
+
+        if (this.cooldown <= 0) {
+            game.projectiles.push(new Projectile(
+                this.x + 14, 
+                this.y + 14, 
+                this.dirX * CONFIG.PROJECTILE_SPEED, 
+                this.dirY * CONFIG.PROJECTILE_SPEED
+            ));
+            this.cooldown = this.type === 'tracking' ? CONFIG.TURRET_COOLDOWN * 0.8 : CONFIG.TURRET_COOLDOWN;
+        }
+    }
+
+    draw(ctx, camera) {
+        ctx.fillStyle = this.type === 'tracking' ? '#554433' : '#444';
+        ctx.fillRect(this.x - camera.x, this.y - camera.y, 40, 40);
+        
+        // Laser Sight
+        if (this.laserActive) {
+            ctx.beginPath();
+            ctx.strokeStyle = this.type === 'tracking' ? 'rgba(255, 100, 0, 0.3)' : 'rgba(255, 0, 68, 0.2)';
+            ctx.lineWidth = 1;
+            ctx.moveTo(this.x + 20 - camera.x, this.y + 20 - camera.y);
+            ctx.lineTo(this.x + 20 + this.dirX * 600 - camera.x, this.y + 20 + this.dirY * 600 - camera.y);
+            ctx.stroke();
+        }
+
+        ctx.fillStyle = this.type === 'tracking' ? '#ff8800' : '#ff0044';
+        // Eye/Barrel
+        const bx = this.x + 15 + this.dirX * 12;
+        const by = this.y + 15 + this.dirY * 12;
+        ctx.fillRect(bx - camera.x, by - camera.y, 10, 10);
+        
+        // Glow if about to fire
+        if (this.cooldown < 30) {
+            ctx.shadowBlur = 15;
+            ctx.shadowColor = this.type === 'tracking' ? '#ff8800' : '#ff0044';
+            ctx.strokeStyle = this.type === 'tracking' ? '#ff8800' : '#ff0044';
+            ctx.strokeRect(this.x - camera.x, this.y - camera.y, 40, 40);
+            ctx.shadowBlur = 0;
+        }
+    }
+}
 
 class Camera {
     constructor() {
@@ -173,6 +273,8 @@ class Game {
         this.isMobile = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
         this.isGoalReached = false;
         this.goalTimer = 0;
+        this.turrets = [];
+        this.projectiles = [];
 
         this.init();
     }
@@ -201,7 +303,7 @@ class Game {
         document.getElementById('return-to-title-btn').onclick = () => this.showScreen('title');
         
         document.getElementById('next-level-btn').onclick = () => {
-            if (this.currentLevel < 5) {
+            if (this.currentLevel < 7) {
                 this.startLevel(this.currentLevel + 1);
             } else {
                 this.showScreen('clear');
@@ -286,7 +388,7 @@ class Game {
     renderLevelGrid() {
         const grid = document.getElementById('level-grid');
         grid.innerHTML = '';
-        for (let i = 0; i <= 5; i++) {
+        for (let i = 0; i <= 7; i++) {
             const btn = document.createElement('div');
             btn.className = `level-btn unlocked`;
             btn.textContent = i === 0 ? 'T' : i;
@@ -313,6 +415,7 @@ class Game {
         this.player.isRecording = false;
         this.player.recording = [];
         this.echoes = [];
+        this.projectiles = [];
         this.activeButtons.clear();
         this.camera.x = 0;
     }
@@ -475,11 +578,67 @@ class Game {
                     { x: 2000, y: 530, w: 100, h: 20 }
                 ],
                 hints: [
-                    { x: 200, y: 300, text: "FINAL DATA EXTRACTION IN PROGRESS." }
+                    { x: 200, y: 300, text: "FINAL DATA EXTRACTION IN PROGRESS." },
+                    { x: 200, y: 330, text: "WATCH THE GUARDIANS." }
+                ],
+                turrets: [
+                    { x: 1000, y: 400, dirX: -1, dirY: 0 },
+                    { x: 1600, y: 400, dirX: 1, dirY: 0 }
+                ]
+            },
+            6: { // The Gauntlet (New)
+                width: 3500,
+                start: { x: 100, y: 450 },
+                goal: { x: 3300, y: 450, w: 80, h: 80 },
+                walls: [
+                    { x: 0, y: 550, w: 3500, h: 50 },
+                    { x: 800, y: 300, w: 40, h: 250 }, // Wall to jump over
+                    { x: 1800, y: 300, w: 40, h: 250 }
+                ],
+                turrets: [
+                    { x: 1200, y: 510, dirX: -1, dirY: 0 }, // Shoots left at player
+                    { x: 1400, y: 510, dirX: -1, dirY: 0 },
+                    { x: 2200, y: 510, dirX: -1, dirY: 0 },
+                    { x: 2400, y: 510, dirX: -1, dirY: 0 },
+                    { x: 3000, y: 510, dirX: -1, dirY: 0 }
+                ],
+                hints: [
+                    { x: 200, y: 300, text: "VOID PROJECTILES DETECTED." },
+                    { x: 200, y: 330, text: "USE YOUR PAST AS A SHIELD." },
+                    { x: 200, y: 360, text: "RECORD A STANDING ECHO TO BLOCK BULLETS." }
+                ]
+            },
+            7: { // The Eye
+                width: 2000,
+                start: { x: 100, y: 500 },
+                goal: { x: 1800, y: 100, w: 80, h: 80 },
+                walls: [
+                    { x: 0, y: 580, w: 2000, h: 20 },
+                    { x: 400, y: 450, w: 200, h: 20 },
+                    { x: 800, y: 350, w: 200, h: 20 },
+                    { x: 1200, y: 250, w: 200, h: 20 }
+                ],
+                turrets: [
+                    { x: 600, y: 100, dirX: 0, dirY: 0, type: 'tracking' },
+                    { x: 1400, y: 400, dirX: 0, dirY: 0, type: 'tracking' },
+                    { x: 1000, y: 500, dirX: 0, dirY: 0, type: 'fixed' }
+                ],
+                hints: [
+                    { x: 200, y: 300, text: "TRACKING SIGNALS DETECTED." },
+                    { x: 200, y: 330, text: "THEY ALWAYS SEE YOU." },
+                    { x: 200, y: 360, text: "ONLY AN ECHO CAN BRAKE THEIR FOCUS." }
                 ]
             }
         };
         this.levelData = levels[id] || levels[0];
+
+        // Initialize Turrets
+        this.turrets = [];
+        if (this.levelData.turrets) {
+            this.levelData.turrets.forEach(t => {
+                this.turrets.push(new Turret(t.x, t.y, t.dirX, t.dirY, t.type || 'fixed'));
+            });
+        }
     }
 
     loop() {
@@ -502,6 +661,55 @@ class Game {
         this.updatePlayer();
         this.echoes.forEach(e => e.update());
         
+        // Turrets and Projectiles
+        this.turrets.forEach(t => t.update(this));
+        
+        for (let i = this.projectiles.length - 1; i >= 0; i--) {
+            const p = this.projectiles[i];
+            p.update();
+            
+            // Remove if life is out
+            if (p.life <= 0) {
+                this.projectiles.splice(i, 1);
+                continue;
+            }
+
+            // Collision with Walls
+            let hitWall = false;
+            for (const w of this.levelData.walls) {
+                if (w.id && this.activeButtons.has(w.id)) continue;
+                if (this.rectIntersect({ x: p.x, y: p.y, width: p.width, height: p.height }, { x: w.x, y: w.y, width: w.w, height: w.h })) {
+                    hitWall = true;
+                    break;
+                }
+            }
+            if (hitWall) {
+                this.spawnParticles(p.x + 6, p.y + 6, p.color, 3);
+                this.projectiles.splice(i, 1);
+                continue;
+            }
+
+            // Collision with Echoes (SHIELD)
+            let hitEcho = false;
+            for (const e of this.echoes) {
+                if (this.rectIntersect({ x: p.x, y: p.y, width: p.width, height: p.height }, { x: e.x, y: e.y, width: e.width, height: e.height })) {
+                    hitEcho = true;
+                    break;
+                }
+            }
+            if (hitEcho) {
+                this.spawnParticles(p.x + 6, p.y + 6, '#00f2ff', 5);
+                this.projectiles.splice(i, 1);
+                continue;
+            }
+
+            // Collision with Player (DEATH)
+            if (this.rectIntersect({ x: p.x, y: p.y, width: p.width, height: p.height }, this.player)) {
+                this.resetLevel();
+                return;
+            }
+        }
+
         // Buttons
         this.activeButtons.clear();
         this.checkButton(this.player);
@@ -625,21 +833,17 @@ class Game {
     }
 
     showLevelClearScreen() {
-        if (this.currentLevel >= 0 && this.currentLevel <= 3) {
+        if (this.currentLevel >= 0 && this.currentLevel <= 6) {
              const idText = this.currentLevel === 0 ? 'Tutorial' : this.currentLevel;
              document.getElementById('cleared-sector-id').textContent = idText;
              
              const nextBtn = document.getElementById('next-level-btn');
-             if (this.currentLevel === 5) {
-                 nextBtn.textContent = 'COMPLETE ALL DATA CORES';
-                 nextBtn.onclick = () => this.showScreen('clear');
-             } else {
-                 nextBtn.textContent = 'PROCEED TO NEXT SECTOR';
-                 nextBtn.onclick = () => this.startLevel(this.currentLevel + 1);
-             }
+             nextBtn.textContent = 'PROCEED TO NEXT SECTOR';
+             nextBtn.onclick = () => this.startLevel(this.currentLevel + 1);
              
              this.showScreen('levelClear');
         } else {
+            // Final Sector cleared
             this.showScreen('clear');
         }
     }
@@ -725,6 +929,12 @@ class Game {
         const pulse = (Math.sin(Date.now() / 200) + 1) * 5;
         this.ctx.strokeRect(g.x - this.camera.x - pulse, g.y - this.camera.y - pulse, g.w + pulse * 2, g.h + pulse * 2);
         this.ctx.shadowBlur = 0;
+
+        // Turrets
+        this.turrets.forEach(t => t.draw(this.ctx, this.camera));
+
+        // Projectiles
+        this.projectiles.forEach(p => p.draw(this.ctx, this.camera));
 
         // Echoes
         this.echoes.forEach(e => e.draw(this.ctx, this.camera));
