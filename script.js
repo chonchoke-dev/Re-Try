@@ -201,7 +201,7 @@ class Game {
         document.getElementById('return-to-title-btn').onclick = () => this.showScreen('title');
         
         document.getElementById('next-level-btn').onclick = () => {
-            if (this.currentLevel < 3) {
+            if (this.currentLevel < 5) {
                 this.startLevel(this.currentLevel + 1);
             } else {
                 this.showScreen('clear');
@@ -220,7 +220,13 @@ class Game {
         if (!this.isMobile) return;
         document.getElementById('mobile-controls').classList.remove('hidden');
 
-        const addTouchBtn = (id, key) => {
+        const moveBtns = {
+            'btn-left': 'KeyA',
+            'btn-right': 'KeyD',
+            'btn-jump': 'Space'
+        };
+
+        Object.entries(moveBtns).forEach(([id, key]) => {
             const btn = document.getElementById(id);
             btn.addEventListener('touchstart', (e) => {
                 e.preventDefault();
@@ -229,16 +235,21 @@ class Game {
             btn.addEventListener('touchend', (e) => {
                 e.preventDefault();
                 this.keys[key] = false;
-                if (key === 'ShiftLeft') this.handlePhase();
-                if (key === 'Escape') this.togglePause();
             });
-        };
+        });
 
-        addTouchBtn('btn-left', 'KeyA');
-        addTouchBtn('btn-right', 'KeyD');
-        addTouchBtn('btn-jump', 'Space');
-        addTouchBtn('btn-phase', 'ShiftLeft');
-        addTouchBtn('btn-pause', 'Escape');
+        // Phase Button - Specialized handling
+        const phaseBtn = document.getElementById('btn-phase');
+        phaseBtn.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            this.handlePhase(); // Start/Stop on tap
+        });
+
+        // Pause Button
+        document.getElementById('btn-pause').addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            this.togglePause();
+        });
     }
 
     showScreen(screenId) {
@@ -246,6 +257,21 @@ class Game {
         this.screens[screenId].classList.remove('hidden');
         if (screenId === 'levelSelect') this.renderLevelGrid();
         
+        const helpOverlay = document.getElementById('help-overlay');
+        if (screenId === 'game') {
+            if (helpOverlay) {
+                helpOverlay.classList.remove('hidden');
+                helpOverlay.style.opacity = '1';
+                setTimeout(() => {
+                    if (this.screens.game.classList.contains('hidden')) return;
+                    helpOverlay.style.opacity = '0';
+                }, 5000);
+            }
+        } else if (helpOverlay) {
+            helpOverlay.classList.add('hidden');
+            helpOverlay.style.opacity = '1';
+        }
+
         // Hide mobile controls on UI screens
         if (this.isMobile) {
             const mobileControls = document.getElementById('mobile-controls');
@@ -260,7 +286,7 @@ class Game {
     renderLevelGrid() {
         const grid = document.getElementById('level-grid');
         grid.innerHTML = '';
-        for (let i = 0; i <= 3; i++) {
+        for (let i = 0; i <= 5; i++) {
             const btn = document.createElement('div');
             btn.className = `level-btn unlocked`;
             btn.textContent = i === 0 ? 'T' : i;
@@ -315,6 +341,13 @@ class Game {
             }
             this.player.isRecording = false;
         }
+        
+        // Visual feedback for mobile button
+        const phaseBtn = document.getElementById('btn-phase');
+        if (phaseBtn) {
+            phaseBtn.classList.toggle('recording', this.player.isRecording);
+            phaseBtn.textContent = this.player.isRecording ? 'STOP' : 'RECORD';
+        }
     }
 
     loadMap(id) {
@@ -360,37 +393,89 @@ class Game {
                 ]
             },
             2: { // Sequential Gates
-                width: 2000,
-                start: { x: 100, y: 400 },
-                goal: { x: 1800, y: 490, w: 60, h: 60 },
+                width: 2800,
+                start: { x: 100, y: 450 },
+                goal: { x: 2600, y: 490, w: 60, h: 60 },
                 walls: [
-                    { x: 0, y: 550, w: 2000, h: 50 },
-                    { x: 800, y: 100, w: 40, h: 450, id: 'door1' }, // Door 1
-                    { x: 1400, y: 100, w: 40, h: 450, id: 'door2' } // Door 2
+                    { x: 0, y: 550, w: 2800, h: 50 },
+                    // Path 1
+                    { x: 800, y: 100, w: 40, h: 450, id: 'door1' },
+                    { x: 400, y: 350, w: 200, h: 20 },
+                    // Path 2
+                    { x: 1600, y: 100, w: 40, h: 450, id: 'door2' },
+                    { x: 1200, y: 250, w: 200, h: 20 },
+                    // Path 3 (New)
+                    { x: 2200, y: 100, w: 40, h: 450, id: 'door3' },
+                    { x: 1900, y: 400, w: 150, h: 20 }
                 ],
                 buttons: [
-                    { x: 500, y: 540, w: 40, h: 10, target: 'door1' },
-                    { x: 1100, y: 540, w: 40, h: 10, target: 'door2' }
+                    { x: 500, y: 340, w: 40, h: 10, target: 'door1' },
+                    { x: 1300, y: 240, w: 40, h: 10, target: 'door2' },
+                    { x: 2000, y: 390, w: 40, h: 10, target: 'door3' }
                 ],
                 hints: [
-                    { x: 300, y: 300, text: "YOU CAN'T BE IN TWO PLACES AT ONCE." },
-                    { x: 1000, y: 300, text: "UNLESS YOU HAVE AN ECHO." }
+                    { x: 300, y: 250, text: "MULTI-PHASE COORDINATION REQUIRED." },
+                    { x: 1000, y: 200, text: "USE ECHOES TO HOLD DOORS OPEN." }
                 ]
             },
-            3: { // Leap of Faith
+            3: { // Leap of Faith (Fixed)
                 width: 4000,
                 start: { x: 100, y: 400 },
-                goal: { x: 3800, y: 450, w: 60, h: 60 },
+                goal: { x: 3850, y: 450, w: 60, h: 60 },
                 walls: [
-                    { x: 0, y: 550, w: 400, h: 50 },
+                    { x: 0, y: 550, w: 500, h: 50 },
+                    { x: 1200, y: 500, w: 100, h: 20 }, // Small platform mid-way
+                    { x: 2400, y: 450, w: 100, h: 20 }, // Small platform mid-way
                     { x: 3600, y: 550, w: 400, h: 50 }
                 ],
                 spikes: [
-                    { x: 400, y: 580, w: 3200, h: 20 }
+                    { x: 500, y: 580, w: 3100, h: 20 }
                 ],
                 hints: [
                     { x: 200, y: 300, text: "A MASSIVE GAP." },
-                    { x: 200, y: 330, text: "CHAIN MULTIPLE ECHOES IN MID-AIR." }
+                    { x: 200, y: 330, text: "BRIDGE THE VOID WITH DATA RECORDS." }
+                ]
+            },
+            4: { // The Ascent (New)
+                width: 1200,
+                start: { x: 100, y: 500 },
+                goal: { x: 1000, y: 50, w: 60, h: 60 },
+                walls: [
+                    { x: 0, y: 580, w: 1200, h: 20 },
+                    { x: 300, y: 450, w: 600, h: 20 },
+                    { x: 0, y: 320, w: 400, h: 20 },
+                    { x: 500, y: 200, w: 700, h: 20 },
+                    { x: 100, y: 100, w: 300, h: 20 }
+                ],
+                hints: [
+                    { x: 100, y: 400, text: "GRAVITY IS ONLY A SUGGESTION." },
+                    { x: 100, y: 430, text: "CLIMB YOUR OWN HISTORY." }
+                ]
+            },
+            5: { // Synchronized Chaos (New)
+                width: 3200,
+                start: { x: 100, y: 450 },
+                goal: { x: 3000, y: 450, w: 80, h: 80 },
+                walls: [
+                    { x: 0, y: 550, w: 3200, h: 50 },
+                    { x: 600, y: 100, w: 40, h: 450, id: 'gateA' },
+                    { x: 1200, y: 0, w: 40, h: 450, id: 'gateB' },
+                    { x: 1800, y: 100, w: 40, h: 450, id: 'gateC' },
+                    { x: 2400, y: 0, w: 40, h: 450, id: 'gateD' }
+                ],
+                buttons: [
+                    { x: 400, y: 540, w: 40, h: 10, target: 'gateA' },
+                    { x: 1000, y: 540, w: 40, h: 10, target: 'gateB' },
+                    { x: 1600, y: 540, w: 40, h: 10, target: 'gateC' },
+                    { x: 2200, y: 540, w: 40, h: 10, target: 'gateD' }
+                ],
+                spikes: [
+                    { x: 800, y: 530, w: 100, h: 20 },
+                    { x: 1400, y: 530, w: 100, h: 20 },
+                    { x: 2000, y: 530, w: 100, h: 20 }
+                ],
+                hints: [
+                    { x: 200, y: 300, text: "FINAL DATA EXTRACTION IN PROGRESS." }
                 ]
             }
         };
@@ -545,7 +630,7 @@ class Game {
              document.getElementById('cleared-sector-id').textContent = idText;
              
              const nextBtn = document.getElementById('next-level-btn');
-             if (this.currentLevel === 3) {
+             if (this.currentLevel === 5) {
                  nextBtn.textContent = 'COMPLETE ALL DATA CORES';
                  nextBtn.onclick = () => this.showScreen('clear');
              } else {

@@ -33,8 +33,11 @@ body {
     background: #050508;
     border: 1px solid rgba(0, 242, 255, 0.2);
     box-shadow: 0 0 100px rgba(0, 0, 0, 0.8), 0 0 20px rgba(0, 242, 255, 0.1);
-    border-radius: 4px;
+    border-radius: 12px;
     overflow: hidden;
+    display: flex;
+    justify-content: center;
+    align-items: center;
 }
 
 .screen {
@@ -198,6 +201,50 @@ h1.glitch {
     font-weight: 700;
 }
 
+/* Help Overlay */
+#help-overlay {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    background: rgba(10, 10, 20, 0.6);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(0, 242, 255, 0.1);
+    padding: 1.5rem;
+    border-radius: 12px;
+    z-index: 60;
+    pointer-events: none;
+    transition: opacity 0.3s;
+}
+
+.help-content h3 {
+    font-size: 0.8rem;
+    letter-spacing: 2px;
+    color: var(--accent-color);
+    margin-bottom: 1rem;
+}
+
+.help-content ul {
+    list-style: none;
+    font-size: 0.75rem;
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.help-content li {
+    margin-bottom: 0.5rem;
+}
+
+.help-content .key {
+    color: var(--player-color);
+    font-weight: 700;
+}
+
+.help-content .hint {
+    margin-top: 1rem;
+    font-style: italic;
+    opacity: 0.5;
+    font-size: 0.7rem;
+}
+
 /* Mobile Controls */
 #mobile-controls {
     position: absolute;
@@ -224,55 +271,87 @@ h1.glitch {
 }
 
 .touch-btn {
-    width: 70px;
-    height: 70px;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(0, 242, 255, 0.3);
-    border-radius: 50%;
+    width: 85px;
+    height: 85px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 2px solid rgba(0, 242, 255, 0.2);
+    border-radius: 20px;
     color: var(--player-color);
-    font-size: 1.5rem;
     display: flex;
     justify-content: center;
     align-items: center;
     cursor: pointer;
     user-select: none;
     -webkit-tap-highlight-color: transparent;
-    backdrop-filter: blur(10px);
-    transition: all 0.2s;
+    backdrop-filter: blur(15px);
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+}
+
+.touch-btn svg {
+    width: 32px;
+    height: 32px;
+    fill: currentColor;
 }
 
 .touch-btn:active {
     background: var(--player-color);
     color: var(--bg-color);
-    transform: scale(0.9);
+    transform: scale(0.9) translateY(4px);
+    border-color: var(--player-color);
+    box-shadow: 0 0 40px var(--player-color);
 }
 
 .phase-btn {
-    border-color: var(--echo-color);
+    border-color: rgba(255, 0, 255, 0.3);
     color: var(--echo-color);
-    font-size: 0.8rem;
-    font-weight: 700;
+    width: 100px;
+    height: 85px;
+    font-size: 0.9rem;
+    font-weight: 800;
+    letter-spacing: 1px;
 }
 
 .phase-btn:active {
     background: var(--echo-color);
+    box-shadow: 0 0 40px var(--echo-color);
+}
+
+.phase-btn.recording {
+    background: var(--echo-color);
+    color: white;
+    box-shadow: 0 0 60px var(--echo-color);
+    animation: pulse-red 1s infinite;
+}
+
+@keyframes pulse-red {
+    0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 0, 255, 0.7); }
+    70% { transform: scale(1.05); box-shadow: 0 0 0 20px rgba(255, 0, 255, 0); }
+    100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 0, 255, 0); }
+}
+
+.jump-btn {
+    width: 100px;
+    height: 100px;
+    border-radius: 50%;
+    margin-bottom: 20px;
 }
 
 .pause-btn {
     position: absolute;
-    top: 20px;
-    right: 20px;
-    width: 50px;
-    height: 50px;
-    border-radius: 8px;
+    top: 30px;
+    right: 30px;
+    width: 60px;
+    height: 60px;
+    border-radius: 12px;
     pointer-events: auto;
 }
 
-/* Responsive Scaling */
-@media (max-width: 850px) {
+/* Mobile Responsive & Landscape Optimization */
+@media (max-width: 850px), (max-height: 600px) {
     #game-container {
         width: 100vw;
-        height: 75vw; /* 800/600 = 4/3 */
+        height: 100vh;
         border: none;
         border-radius: 0;
     }
@@ -280,25 +359,71 @@ h1.glitch {
     #game-canvas {
         width: 100% !important;
         height: 100% !important;
+        object-fit: contain;
     }
 
     h1.glitch {
-        font-size: 3rem;
-        letter-spacing: 0.5rem;
+        font-size: clamp(2.5rem, 10vw, 5rem);
+        letter-spacing: 0.2rem;
     }
     
     .neon-btn {
-        padding: 1rem 2rem;
-        font-size: 0.8rem;
+        padding: 1rem 3rem;
+        font-size: 0.9rem;
+    }
+
+    #mobile-controls {
+        padding: 1.5rem;
+        bottom: 0px;
+    }
+    
+    .control-group.d-pad {
+        position: absolute;
+        bottom: 40px;
+        left: 40px;
+        gap: 20px;
+    }
+    
+    .control-group.actions {
+        position: absolute;
+        bottom: 40px;
+        right: 40px;
+        flex-direction: column-reverse;
+        align-items: flex-end;
+        gap: 15px;
     }
 
     .touch-btn {
-        width: 60px;
-        height: 60px;
+        width: 75px;
+        height: 75px;
     }
     
+    .phase-btn {
+        width: 140px;
+        height: 75px;
+    }
+}
+
+/* Landscape Specific */
+@media (orientation: landscape) and (max-height: 500px) {
     #mobile-controls {
-        padding: 1rem;
+        padding: 0.5rem;
+    }
+    
+    .control-group.d-pad {
+        bottom: 20px;
+        left: 20px;
+    }
+    
+    .control-group.actions {
+        bottom: 20px;
+        right: 20px;
+        flex-direction: row-reverse;
+    }
+    
+    .pause-btn {
+        top: 20px;
+        right: 20px;
     }
 }
 
