@@ -348,6 +348,7 @@ class Game {
             this.goalTimer = 0;
             this.turrets = [];
             this.projectiles = [];
+            this.camera = new Camera();
 
             this.init();
         } catch (e) {
@@ -843,12 +844,17 @@ class Game {
     }
 
     loop() {
-        this.updateFade();
-        if (!this.isPaused && this.currentScreen === 'game') {
-            this.update();
-        }
-        this.draw();
         requestAnimationFrame(() => this.loop());
+        
+        try {
+            this.updateFade();
+            if (!this.isPaused && this.currentScreen === 'game') {
+                this.update();
+            }
+            this.draw();
+        } catch (e) {
+            console.error("Game Loop Error:", e);
+        }
     }
 
     updateFade() {
@@ -1428,14 +1434,17 @@ class Game {
 }
 
 function startGame() {
+    console.log("ECHO RUN: Initializing System...");
     if (!window.gameInstance) {
         window.gameInstance = new Game();
+        console.log("ECHO RUN: Core Initialized.");
     }
 }
 
-if (document.readyState === 'complete') {
-    startGame();
+// More robust initialization
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', startGame);
 } else {
-    window.addEventListener('load', startGame);
+    startGame();
 }
 
