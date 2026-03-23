@@ -16,6 +16,72 @@
             <h1 class="glitch">ECHO RUN</h1>
             <p class="subtitle">BREAK THE LOOP</p>
             <button id="start-btn" class="neon-btn">INITIALIZE</button>
+            <button id="how-to-play-btn" class="text-btn">遊び方 / HOW TO PLAY</button>
+        </div>
+        <!-- Character Select -->
+        <div id="character-select" class="screen hidden">
+            <h2>SELECT AVATAR</h2>
+            <div id="character-grid">
+                <div class="char-card active" data-char="cube">
+                    <div class="char-preview cube"></div>
+                    <h3>CUBE</h3>
+                    <p class="char-desc">MOMENTUM SLINGSHOT</p>
+                    <ul class="stats">
+                        <li>SPEED: ■■■□□</li>
+                        <li>JUMP: ■■■□□</li>
+                        <li>ABILITY: KEEPS VELOCITY</li>
+                    </ul>
+                </div>
+                <div class="char-card" data-char="triangle">
+                    <div class="char-preview triangle"></div>
+                    <h3>TRIANGLE</h3>
+                    <p class="char-desc">WALL JUMP AGILITY</p>
+                    <ul class="stats">
+                        <li>SPEED: ■■■■■</li>
+                        <li>JUMP: ■■■■□</li>
+                        <li>ABILITY: WALL JUMP</li>
+                    </ul>
+                </div>
+                <div class="char-card" data-char="circle">
+                    <div class="char-preview circle"></div>
+                    <h3>CIRCLE</h3>
+                    <p class="char-desc">CHRONOS RECORDING</p>
+                    <ul class="stats">
+                        <li>SPEED: ■■□□□</li>
+                        <li>JUMP: ■■□□□</li>
+                        <li>ABILITY: SLOW-MO REC</li>
+                    </ul>
+                </div>
+            </div>
+            <button id="confirm-char-btn" class="neon-btn">INITIALIZE CORE</button>
+            <button id="back-to-title-2" class="text-btn">RETURN</button>
+        </div>
+
+        <!-- How To Play (JP) -->
+        <div id="how-to-play" class="screen hidden">
+            <h2>遊び方 - MISSION PROTOCOL</h2>
+            <div class="tutorial-content">
+                <section>
+                    <h3>基本操作</h3>
+                    <p><span class="key">A / D (または矢印キー)</span>: 移動</p>
+                    <p><span class="key">SPACE / W</span>: ジャンプ</p>
+                    <p><span class="key">SHIFT</span>: フェーズ記録 (開始 / 停止)</p>
+                    <p><span class="key">R</span>: セクター再起動</p>
+                </section>
+                <section>
+                    <h3>エコー (ECHO) 仕組み</h3>
+                    <p>1. <strong>記録</strong>: SHIFTを押すと自分の動きを記録します。</p>
+                    <p>2. <strong>残像</strong>: 再度SHIFTを押すと、記録開始地点にテレポートし、その軌跡に「実体を持った残像」を残します。</p>
+                    <p>3. <strong>活用</strong>: 残像は足場にしたり、敵の弾を防ぐシールドとして使えます。</p>
+                </section>
+                <section>
+                    <h3>アバターの特性</h3>
+                    <p><strong>CUBE</strong>: テレポート時に速度を維持する「スリンショット」が可能。</p>
+                    <p><strong>TRIANGLE</strong>: 高速移動と「壁ジャンプ」が可能。</p>
+                    <p><strong>CIRCLE</strong>: 記録中、時間の流れを遅くする「クロノス」が発動。</p>
+                </section>
+            </div>
+            <button id="back-from-how-to" class="neon-btn">UNDERSTOOD</button>
         </div>
 
         <!-- Level Select -->
@@ -65,6 +131,18 @@
                 </div>
             </div>
 
+            <div id="mobile-controls" class="hidden">
+                <div class="control-group left">
+                    <button id="btn-left" class="joy-btn">←</button>
+                    <button id="btn-right" class="joy-btn">→</button>
+                </div>
+                <div class="control-group right">
+                    <button id="btn-phase" class="phase-btn">RECORD</button>
+                    <button id="btn-jump" class="joy-btn">↑</button>
+                </div>
+                <button id="btn-pause" class="pause-btn">ll</button>
+            </div>
+
             <div id="pause-menu" class="hidden">
                 <h3>MODULE PAUSED</h3>
                 <button id="resume-btn" class="neon-btn">RESUME</button>
@@ -75,12 +153,17 @@
 
         <div id="level-clear-screen" class="screen hidden">
             <h1 class="glitch">GOAL!</h1>
-            <p class="subtitle">SECTOR SECURED</p>
-            <div class="final-stats">
-                <p>SECTOR: <span id="cleared-sector-id">-</span></p>
+            <h2 class="glitch">MISSION COMPLETE</h2>
+            <p>Sector <span id="cleared-sector-id">0</span> Data Extracted</p>
+            <div class="mission-stats">
+                <div class="stat-item">GRADE: <span id="clear-grade" class="grade-s">-</span></div>
+                <div class="stat-item">TIME: <span id="clear-time">0.00s</span></div>
+                <div class="stat-item">DEATHS: <span id="clear-deaths">0</span></div>
             </div>
-            <button id="next-level-btn" class="neon-btn">PROCEED TO NEXT SECTOR</button>
-            <button id="level-clear-to-select" class="text-btn">RETURN TO MAP</button>
+            <div class="clear-btns">
+                <button id="next-level-btn" class="neon-btn">NEXT SECTOR</button>
+                <button id="back-to-title-2" class="text-btn">RETURN TO HUB</button>
+            </div>
         </div>
 
         <div id="clear-screen" class="screen hidden">
@@ -88,8 +171,15 @@
             <p class="subtitle">ALL DATA CORES SECURED</p>
             <button id="return-to-title-btn" class="neon-btn">RETURN TO BASE</button>
         </div>
+
+        <div id="rotate-overlay">
+            <div class="rotate-content">
+                <div class="phone-icon"></div>
+                <p>Please Rotate Your Device</p>
+                <p class="jp">画面を横にしてプレイしてください</p>
+            </div>
+        </div>
     </div>
     <script src="script.js"></script>
 </body>
 </html>
-

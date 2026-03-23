@@ -34,6 +34,36 @@ const CONFIG = {
     PROJECTILE_SPEED: 6
 };
 
+const CHARACTERS = {
+    cube: {
+        name: 'CUBE',
+        speed: 4.8,
+        jump: -11,
+        maxEchoes: 6,
+        width: 32,
+        height: 42,
+        shape: 'square'
+    },
+    triangle: {
+        name: 'TRIANGLE',
+        speed: 6.5,
+        jump: -13.5,
+        maxEchoes: 4,
+        width: 32,
+        height: 32,
+        shape: 'triangle'
+    },
+    circle: {
+        name: 'CIRCLE',
+        speed: 3.8,
+        jump: -10,
+        maxEchoes: 10,
+        width: 40,
+        height: 40,
+        shape: 'circle'
+    }
+};
+
 class Projectile {
     constructor(x, y, vx, vy) {
         this.x = x;
@@ -46,10 +76,10 @@ class Projectile {
         this.life = 300; // Max frames
     }
 
-    update() {
-        this.x += this.vx;
-        this.y += this.vy;
-        this.life--;
+    update(ts = 1.0) {
+        this.x += this.vx * ts;
+        this.y += this.vy * ts;
+        this.life -= 1 * ts;
     }
 
     draw(ctx, camera) {
@@ -140,18 +170,17 @@ class Camera {
     }
 
     update(playerX, playerY, levelWidth, levelHeight) {
-        // Horizontal scroll
-        if (playerX - this.x > CONFIG.SCREEN_WIDTH - this.deadzone) {
-            this.x = playerX - (CONFIG.SCREEN_WIDTH - this.deadzone);
-        } else if (playerX - this.x < this.deadzone) {
-            this.x = playerX - this.deadzone;
-        }
+        // Horizontal scroll with smoothing
+        const targetX = playerX - CONFIG.SCREEN_WIDTH / 2;
+        this.x += (targetX - this.x) * 0.1;
 
-        // Vertical scroll (optional, but keep it centered-ish)
-        this.y = 0; // Stick to bottom for now
+        // Vertical scroll (limited)
+        const targetY = (playerY - CONFIG.SCREEN_HEIGHT / 2) * 0.3;
+        this.y += (targetY - this.y) * 0.1;
 
         // Clamp
         this.x = Math.max(0, Math.min(this.x, levelWidth - CONFIG.SCREEN_WIDTH));
+        this.y = Math.max(-100, Math.min(this.y, levelHeight - CONFIG.SCREEN_HEIGHT));
     }
 }
 
@@ -189,8 +218,9 @@ class Echo {
         this.recording = [...recording];
         this.color = color;
         this.frame = 0;
-        this.width = 32;
-        this.height = 42;
+        this.width = recording[0].width || 32;
+        this.height = recording[0].height || 42;
+        this.shape = recording[0].shape || 'square';
         this.x = this.recording[0].x;
         this.y = this.recording[0].y;
         this.isDone = false;
@@ -213,7 +243,14 @@ class Echo {
         ctx.fillStyle = this.color;
         ctx.shadowBlur = 10;
         ctx.shadowColor = this.color;
-        ctx.fillRect(this.x - camera.x, this.y - camera.y, this.width, this.height);
+        
+        if (this.shape === 'triangle') {
+            this.drawTriangle(ctx, camera);
+        } else if (this.shape === 'circle') {
+            this.drawCircle(ctx, camera);
+        } else {
+            ctx.fillRect(this.x - camera.x, this.y - camera.y, this.width, this.height);
+        }
         
         // Outline if done
         if (this.isDone) {
@@ -227,6 +264,21 @@ class Echo {
         ctx.globalAlpha = 1.0;
     }
 
+    drawTriangle(ctx, camera) {
+        ctx.beginPath();
+        ctx.moveTo(this.x + this.width / 2 - camera.x, this.y - camera.y);
+        ctx.lineTo(this.x + this.width - camera.x, this.y + this.height - camera.y);
+        ctx.lineTo(this.x - camera.x, this.y + this.height - camera.y);
+        ctx.closePath();
+        ctx.fill();
+    }
+
+    drawCircle(ctx, camera) {
+        ctx.beginPath();
+        ctx.arc(this.x + this.width / 2 - camera.x, this.y + this.height / 2 - camera.y, this.width / 2, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
     getRect() {
         return { x: this.x, y: this.y, w: this.width, h: this.height };
     }
@@ -236,25 +288,45 @@ class Game {
     constructor() {
         this.canvas = document.getElementById('game-canvas');
         this.ctx = this.canvas.getContext('2d');
-        this.canvas.width = CONFIG.SCREEN_WIDTH;
-        this.canvas.height = CONFIG.SCREEN_HEIGHT;
-
+        
+        // Fixed internal resolution
+        this.baseWidth = 1200;
+        this.baseHeight = 600;
+        this.canvas.width = this.baseWidth;
+        this.canvas.height = this.baseHeight;
+        
         this.screens = {
             title: document.getElementById('title-screen'),
             levelSelect: document.getElementById('level-select'),
             game: document.getElementById('game-screen'),
             levelClear: document.getElementById('level-clear-screen'),
-            clear: document.getElementById('clear-screen')
+            clear: document.getElementById('clear-screen'),
+            characterSelect: document.getElementById('character-select'),
+            howToPlay: document.getElementById('how-to-play')
         };
 
-        this.camera = new Camera();
-        this.currentLevel = 0;
+        this.deaths = 0;
+        this.levelTimer = 0;
+        this.gameData = this.loadData();
+        
+        // Transitions
+        this.fadeAlpha = 0;
+        this.fadeTarget = null;
+        this.isFading = false;
+        this.currentScreen = 'title'; // Keep track of current screen for fade logic
         this.unlockedLevels = 1;
         this.isPaused = false;
+        this.selectedCharId = 'cube';
         
         this.player = {
             x: 0, y: 0, vx: 0, vy: 0, width: 32, height: 42,
+            renderW: 32, renderH: 42, // Squash and Stretch
+            shape: 'square',
+            maxEchoes: 6,
+            moveSpeed: 4.8,
+            jumpForce: -11,
             onGround: false,
+            wasOnGround: false,
             coyoteTimer: 0,
             jumpBuffer: 0,
             isRecording: false,
@@ -289,8 +361,27 @@ class Game {
         });
         window.addEventListener('keyup', (e) => this.keys[e.code] = false);
 
-        document.getElementById('start-btn').onclick = () => this.showScreen('levelSelect');
+        document.getElementById('start-btn').onclick = () => this.showScreen('characterSelect');
+        document.getElementById('how-to-play-btn').onclick = () => this.showScreen('howToPlay');
+        document.getElementById('back-from-how-to').onclick = () => this.showScreen('title');
         document.getElementById('back-to-title').onclick = () => this.showScreen('title');
+        document.getElementById('back-to-title-2').onclick = () => this.showScreen('title');
+        
+        // Character Selection
+        const charCards = document.querySelectorAll('.char-card');
+        charCards.forEach(card => {
+            card.onclick = () => {
+                charCards.forEach(c => c.classList.remove('active'));
+                card.classList.add('active');
+                this.selectedCharId = card.dataset.char;
+            };
+        });
+
+        document.getElementById('confirm-char-btn').onclick = () => {
+            this.applyCharacterStats();
+            this.showScreen('levelSelect');
+        };
+
         document.getElementById('resume-btn').onclick = () => this.togglePause();
         document.getElementById('restart-level-btn').onclick = () => {
             if (this.isPaused) this.togglePause();
@@ -312,16 +403,33 @@ class Game {
         document.getElementById('level-clear-to-select').onclick = () => this.showScreen('levelSelect');
 
         this.initTouchControls();
+        this.handleResize();
+        window.addEventListener('resize', () => this.handleResize());
         this.renderLevelGrid();
         this.showScreen('title');
         
         requestAnimationFrame(() => this.loop());
     }
 
-    initTouchControls() {
-        if (!this.isMobile) return;
-        document.getElementById('mobile-controls').classList.remove('hidden');
+    handleResize() {
+        const ww = window.innerWidth;
+        const wh = window.innerHeight;
+        const ratio = this.baseWidth / this.baseHeight;
+        
+        let newWidth, newHeight;
+        if (ww / wh > ratio) {
+            newHeight = wh;
+            newWidth = wh * ratio;
+        } else {
+            newWidth = ww;
+            newHeight = ww / ratio;
+        }
+        
+        this.canvas.style.width = `${newWidth}px`;
+        this.canvas.style.height = `${newHeight}px`;
+    }
 
+    initTouchControls() {
         const moveBtns = {
             'btn-left': 'KeyA',
             'btn-right': 'KeyD',
@@ -330,6 +438,7 @@ class Game {
 
         Object.entries(moveBtns).forEach(([id, key]) => {
             const btn = document.getElementById(id);
+            if (!btn) return;
             btn.addEventListener('touchstart', (e) => {
                 e.preventDefault();
                 this.keys[key] = true;
@@ -340,24 +449,47 @@ class Game {
             });
         });
 
-        // Phase Button - Specialized handling
         const phaseBtn = document.getElementById('btn-phase');
-        phaseBtn.addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            this.handlePhase(); // Start/Stop on tap
-        });
+        if (phaseBtn) {
+            phaseBtn.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                this.handlePhase();
+            });
+        }
 
-        // Pause Button
-        document.getElementById('btn-pause').addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            this.togglePause();
-        });
+        const pauseBtn = document.getElementById('btn-pause');
+        if (pauseBtn) {
+            pauseBtn.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                this.togglePause();
+            });
+        }
+    }
+
+    saveData() {
+        localStorage.setItem('echoRun_v1', JSON.stringify(this.gameData));
+    }
+
+    loadData() {
+        const saved = localStorage.getItem('echoRun_v1');
+        return saved ? JSON.parse(saved) : { unlocked: [0], grades: {} };
     }
 
     showScreen(screenId) {
-        Object.keys(this.screens).forEach(key => this.screens[key].classList.add('hidden'));
-        this.screens[screenId].classList.remove('hidden');
-        if (screenId === 'levelSelect') this.renderLevelGrid();
+        if (this.isFading) return;
+        this.isFading = true;
+        this.fadeTarget = screenId;
+        this.fadeAlpha = 0;
+    }
+
+    executeScreenSwitch(screenId) {
+        Object.values(this.screens).forEach(s => s.classList.add('hidden'));
+        if (this.screens[screenId]) {
+            this.screens[screenId].classList.remove('hidden');
+        }
+        this.currentScreen = screenId;
+        
+        if (screenId === 'levelSelect') this.updateLevelSelectUI();
         
         const helpOverlay = document.getElementById('help-overlay');
         if (screenId === 'game') {
@@ -385,20 +517,47 @@ class Game {
         }
     }
 
+    updateLevelSelectUI() {
+        const btns = document.querySelectorAll('.level-btn');
+        btns.forEach(btn => {
+            const id = parseInt(btn.dataset.level);
+            btn.classList.toggle('locked', !this.gameData.unlocked.includes(id));
+            const grade = this.gameData.grades[id];
+            if (grade) {
+                let gradeSpan = btn.querySelector('.grade-badge');
+                if (!gradeSpan) {
+                    gradeSpan = document.createElement('span');
+                    gradeSpan.className = 'grade-badge';
+                    btn.appendChild(gradeSpan);
+                }
+                gradeSpan.textContent = grade;
+                gradeSpan.className = `grade-badge grade-${grade}`;
+            }
+        });
+    }
+
     renderLevelGrid() {
         const grid = document.getElementById('level-grid');
         grid.innerHTML = '';
         for (let i = 0; i <= 7; i++) {
             const btn = document.createElement('div');
-            btn.className = `level-btn unlocked`;
+            btn.className = `level-btn`;
+            btn.dataset.level = i; // Store level ID
             btn.textContent = i === 0 ? 'T' : i;
-            btn.onclick = () => this.startLevel(i);
+            btn.onclick = () => {
+                if (this.gameData.unlocked.includes(i)) {
+                    this.startLevel(i);
+                }
+            };
             grid.appendChild(btn);
         }
+        this.updateLevelSelectUI(); // Update grades and locked status
     }
 
     startLevel(id) {
         this.currentLevel = id;
+        this.deaths = 0;
+        this.levelTimer = 0;
         this.echoes = [];
         this.isGoalReached = false;
         this.goalTimer = 0;
@@ -407,6 +566,7 @@ class Game {
     }
 
     resetLevel() {
+        this.deaths++; // Increment death count on reset
         this.loadMap(this.currentLevel);
         this.player.x = this.levelData.start.x;
         this.player.y = this.levelData.start.y;
@@ -418,6 +578,17 @@ class Game {
         this.projectiles = [];
         this.activeButtons.clear();
         this.camera.x = 0;
+        this.applyCharacterStats();
+    }
+
+    applyCharacterStats() {
+        const char = CHARACTERS[this.selectedCharId];
+        this.player.width = char.width;
+        this.player.height = char.height;
+        this.player.moveSpeed = char.speed;
+        this.player.jumpForce = char.jump;
+        this.player.maxEchoes = char.maxEchoes;
+        this.player.shape = char.shape;
     }
 
     handlePhase() {
@@ -431,16 +602,28 @@ class Game {
             // Spawn Echo
             if (this.player.recording.length > 5) {
                 const color = CONFIG.ECHO_PALETTE[this.echoes.length % CONFIG.ECHO_PALETTE.length];
-                this.echoes.push(new Echo(this.player.recording, color));
-                if (this.echoes.length > CONFIG.MAX_ECHOES) this.echoes.shift();
+                // Add shape data to recording for Echo
+                const recordingData = this.player.recording.map(p => ({...p, shape: this.player.shape, width: this.player.width, height: this.player.height}));
+                this.echoes.push(new Echo(recordingData, color));
+                if (this.echoes.length > this.player.maxEchoes) this.echoes.shift();
                 
                 // Teleport back
                 this.player.x = this.player.recordStartX;
                 this.player.y = this.player.recordStartY;
-                this.player.vx = 0;
-                this.player.vy = 0;
+                
+                if (this.player.shape !== 'square') { // Cube (square) keeps momentum
+                    this.player.vx = 0;
+                    this.player.vy = 0;
+                } else {
+                    // Slingshot: boost momentum slightly for Cube
+                    this.player.vx *= 1.2;
+                    this.player.vy *= 1.2;
+                    this.shakeTime = 15; // Extra shake for slingshot
+                }
+
                 this.player.trail = [];
-                this.spawnParticles(this.player.x + 16, this.player.y + 21, color, 15);
+                this.spawnParticles(this.player.x + this.player.width/2, this.player.y + this.player.height/2, color, 15);
+                this.shakeTime = Math.max(this.shakeTime, 10);
             }
             this.player.isRecording = false;
         }
@@ -467,12 +650,12 @@ class Game {
                 ],
                 spikes: [{ x: 800, y: 580, w: 100, h: 20 }],
                 hints: [
-                    { x: 100, y: 300, text: "A / D to Move" },
-                    { x: 100, y: 330, text: "W / SPACE to Jump" },
-                    { x: 750, y: 450, text: "Wait, a gap!" },
-                    { x: 1100, y: 250, text: "HOLD SHIFT to record your path" },
-                    { x: 1100, y: 280, text: "(Watch the neon trail!)" },
-                    { x: 1100, y: 310, text: "RELEASE to teleport & create a platform" }
+                    { x: 100, y: 300, text: "A / D で移動" },
+                    { x: 100, y: 330, text: "SPACE / W でジャンプ" },
+                    { x: 750, y: 450, text: "大きな溝があるぞ！" },
+                    { x: 1100, y: 250, text: "SHIFTキーを長押しして移動を記録" },
+                    { x: 1100, y: 280, text: "（ネオンの軌跡を確認！）" },
+                    { x: 1100, y: 310, text: "離すとテレポート＆足場(ECHO)を生成" }
                 ]
             },
             1: { // Sky Climb
@@ -490,9 +673,9 @@ class Game {
                     { x: 600, y: 580, w: 150, h: 20 }
                 ],
                 hints: [
-                    { x: 300, y: 250, text: "WALL TOO HIGH?" },
-                    { x: 300, y: 280, text: "RECORD A JUMP AT THE PEAK" },
-                    { x: 300, y: 310, text: "AND USE IT AS A LADDER." }
+                    { x: 300, y: 250, text: "壁が高すぎる？" },
+                    { x: 300, y: 280, text: "ジャンプの頂点を記録しよう。" },
+                    { x: 300, y: 310, text: "それを階段のように使ってみて。" }
                 ]
             },
             2: { // Sequential Gates
@@ -517,8 +700,8 @@ class Game {
                     { x: 2000, y: 390, w: 40, h: 10, target: 'door3' }
                 ],
                 hints: [
-                    { x: 300, y: 250, text: "MULTI-PHASE COORDINATION REQUIRED." },
-                    { x: 1000, y: 200, text: "USE ECHOES TO HOLD DOORS OPEN." }
+                    { x: 300, y: 250, text: "複数フェーズの連携が必要だ。" },
+                    { x: 1000, y: 200, text: "エコーを使ってドアを開け続けよう。" }
                 ]
             },
             3: { // Leap of Faith (Fixed)
@@ -535,8 +718,8 @@ class Game {
                     { x: 500, y: 580, w: 3100, h: 20 }
                 ],
                 hints: [
-                    { x: 200, y: 300, text: "A MASSIVE GAP." },
-                    { x: 200, y: 330, text: "BRIDGE THE VOID WITH DATA RECORDS." }
+                    { x: 200, y: 300, text: "巨大な落とし穴だ。" },
+                    { x: 200, y: 330, text: "記録を繋いで、空中に橋を架けろ。" }
                 ]
             },
             4: { // The Ascent (New)
@@ -551,8 +734,8 @@ class Game {
                     { x: 100, y: 100, w: 300, h: 20 }
                 ],
                 hints: [
-                    { x: 100, y: 400, text: "GRAVITY IS ONLY A SUGGESTION." },
-                    { x: 100, y: 430, text: "CLIMB YOUR OWN HISTORY." }
+                    { x: 100, y: 400, text: "重力はただの提案に過ぎない。" },
+                    { x: 100, y: 430, text: "自分の「履歴」を登れ。" }
                 ]
             },
             5: { // Synchronized Chaos (New)
@@ -578,8 +761,8 @@ class Game {
                     { x: 2000, y: 530, w: 100, h: 20 }
                 ],
                 hints: [
-                    { x: 200, y: 300, text: "FINAL DATA EXTRACTION IN PROGRESS." },
-                    { x: 200, y: 330, text: "WATCH THE GUARDIANS." }
+                    { x: 200, y: 300, text: "最終データ抽出が進行中。" },
+                    { x: 200, y: 330, text: "守護者の動きに注意せよ。" }
                 ],
                 turrets: [
                     { x: 1000, y: 400, dirX: -1, dirY: 0 },
@@ -603,9 +786,9 @@ class Game {
                     { x: 3000, y: 510, dirX: -1, dirY: 0 }
                 ],
                 hints: [
-                    { x: 200, y: 300, text: "VOID PROJECTILES DETECTED." },
-                    { x: 200, y: 330, text: "USE YOUR PAST AS A SHIELD." },
-                    { x: 200, y: 360, text: "RECORD A STANDING ECHO TO BLOCK BULLETS." }
+                    { x: 200, y: 300, text: "ヴォイド弾を検知。" },
+                    { x: 200, y: 330, text: "「過去」を盾として使え。" },
+                    { x: 200, y: 360, text: "静止状態のエコーで弾を遮断できる。" }
                 ]
             },
             7: { // The Eye
@@ -624,9 +807,9 @@ class Game {
                     { x: 1000, y: 500, dirX: 0, dirY: 0, type: 'fixed' }
                 ],
                 hints: [
-                    { x: 200, y: 300, text: "TRACKING SIGNALS DETECTED." },
-                    { x: 200, y: 330, text: "THEY ALWAYS SEE YOU." },
-                    { x: 200, y: 360, text: "ONLY AN ECHO CAN BRAKE THEIR FOCUS." }
+                    { x: 200, y: 300, text: "追跡信号を検知。" },
+                    { x: 200, y: 330, text: "彼らは常に君を見ている。" },
+                    { x: 200, y: 360, text: "エコーだけが、彼らの視線を逸らせる。" }
                 ]
             }
         };
@@ -642,7 +825,7 @@ class Game {
     }
 
     loop() {
-        if (!this.isPaused && this.levelData) {
+        if (!this.isPaused && this.currentScreen === 'game') {
             this.update();
         }
         this.draw();
@@ -650,23 +833,52 @@ class Game {
     }
 
     update() {
+        // Fade logic
+        if (this.isFading) {
+            this.fadeAlpha += 0.05;
+            if (this.fadeAlpha >= 1) {
+                this.executeScreenSwitch(this.fadeTarget);
+                this.isFading = false;
+                this.fadeAlpha = 1; // Start fading back in next frame?
+            }
+        } else if (this.fadeAlpha > 0) {
+            this.fadeAlpha -= 0.05;
+        }
+
+        if (this.currentScreen !== 'game') return;
+
         if (this.isGoalReached) {
             this.goalTimer--;
             if (this.goalTimer <= 0) {
-                this.showLevelClearScreen();
+                this.showLevelClearScreen(); // Changed to showLevelClearScreen
             }
             return;
         }
 
-        this.updatePlayer();
-        this.echoes.forEach(e => e.update());
+        this.levelTimer++;
+        let timeScale = 1.0;
+        if (this.player.isRecording && this.player.shape === 'circle') {
+            timeScale = 0.4; // 40% speed
+        }
+
+        this.updatePlayer(timeScale);
+        
+        // Everything else scaled by timeScale
+        this.echoes.forEach(e => {
+            for (let i = 0; i < (timeScale < 1 ? 0 : 1); i++) e.update(); 
+            // Better: update echoes precisely
+            if (timeScale >= 1 || Math.random() < timeScale) e.update();
+        });
         
         // Turrets and Projectiles
-        this.turrets.forEach(t => t.update(this));
+        this.turrets.forEach(t => {
+             // For turrets, we still use the randomized fire rate skip, but maybe smoother
+            if (timeScale >= 1 || Math.random() < timeScale) t.update(this);
+        });
         
         for (let i = this.projectiles.length - 1; i >= 0; i--) {
             const p = this.projectiles[i];
-            p.update();
+            p.update(timeScale);
             
             // Remove if life is out
             if (p.life <= 0) {
@@ -732,14 +944,15 @@ class Game {
         }
     }
 
-    updatePlayer() {
+    updatePlayer(ts = 1.0) {
         // Horizontal
-        if (this.keys['KeyA'] || this.keys['ArrowLeft']) this.player.vx = -CONFIG.MOVE_SPEED;
-        else if (this.keys['KeyD'] || this.keys['ArrowRight']) this.player.vx = CONFIG.MOVE_SPEED;
+        let speed = this.player.moveSpeed * ts;
+        if (this.keys['KeyA'] || this.keys['ArrowLeft']) this.player.vx = -speed;
+        else if (this.keys['KeyD'] || this.keys['ArrowRight']) this.player.vx = speed;
         else this.player.vx *= 0.8;
 
         // Gravity
-        this.player.vy += CONFIG.GRAVITY;
+        this.player.vy += CONFIG.GRAVITY * ts;
 
         // Jump Handling (Coyote + Buffer)
         if (this.player.onGround) this.player.coyoteTimer = CONFIG.COYOTE_TIME;
@@ -748,27 +961,77 @@ class Game {
         if (this.keys['Space'] || this.keys['ArrowUp'] || this.keys['KeyW']) this.player.jumpBuffer = CONFIG.JUMP_BUFFER;
         else this.player.jumpBuffer--;
 
-        if (this.player.jumpBuffer > 0 && this.player.coyoteTimer > 0) {
-            this.player.vy = CONFIG.JUMP_FORCE;
-            this.player.jumpBuffer = 0;
-            this.player.coyoteTimer = 0;
-            this.spawnParticles(this.player.x + 16, this.player.y + 40, CONFIG.COLORS.PLAYER, 5);
+        // Jump Exec
+        if (this.player.jumpBuffer > 0) {
+            if (this.player.coyoteTimer > 0) {
+                // Normal Jump
+                this.player.vy = this.player.jumpForce;
+                this.player.jumpBuffer = 0;
+                this.player.coyoteTimer = 0;
+                this.spawnParticles(this.player.x + this.player.width / 2, this.player.y + this.player.height, CONFIG.COLORS.PLAYER, 5);
+                
+                // Squash and Stretch: Stretch on jump
+                this.player.renderW = this.player.width * 0.8;
+                this.player.renderH = this.player.height * 1.3;
+            } else if (this.player.shape === 'triangle' && !this.player.onGround) {
+                // Wall Jump (Triangle Only)
+                const wallSide = this.getWallSide();
+                if (wallSide !== 0) {
+                    this.player.vy = this.player.jumpForce * 0.9;
+                    this.player.vx = -wallSide * this.player.moveSpeed * 1.5;
+                    this.player.jumpBuffer = 0;
+                    this.spawnParticles(this.player.x + (wallSide > 0 ? this.player.width : 0), this.player.y + this.player.height/2, '#fff', 8);
+                    this.shakeTime = 5;
+                    this.player.renderW = this.player.width * 0.7;
+                    this.player.renderH = this.player.height * 1.4;
+                }
+            }
         }
 
         // Movement Execution
+        this.player.wasOnGround = this.player.onGround;
         this.player.x += this.player.vx;
         this.resolveCollisions(true);
         this.player.y += this.player.vy;
         this.resolveCollisions(false);
+
+        // Landing Impact
+        if (this.player.onGround && !this.player.wasOnGround) {
+            this.spawnParticles(this.player.x + this.player.width / 2, this.player.y + this.player.height, '#fff', 5);
+            this.player.renderW = this.player.width * 1.4;
+            this.player.renderH = this.player.height * 0.6;
+            if (Math.abs(this.player.vy) > 10) this.shakeTime = 10;
+        }
+
+        // Lerp Squash and Stretch back to normal
+        this.player.renderW += (this.player.width - this.player.renderW) * 0.2;
+        this.player.renderH += (this.player.height - this.player.renderH) * 0.2;
 
         // Recording
         if (this.player.isRecording) {
             this.player.recording.push({ x: this.player.x, y: this.player.y });
             // Add to trail every few frames for performance
             if (this.player.recording.length % 2 === 0) {
-                 this.player.trail.push({ x: this.player.x + 16, y: this.player.y + 21 });
+                 this.player.trail.push({ x: this.player.x + this.player.width / 2, y: this.player.y + this.player.height / 2 });
             }
         }
+    }
+
+    getWallSide() {
+        // Check small offset left/right for wall collision
+        let side = 0;
+        const checkDist = 4;
+        
+        const leftRect = { x: this.player.x - checkDist, y: this.player.y + 4, width: checkDist, height: this.player.height - 8 };
+        const rightRect = { x: this.player.x + this.player.width, y: this.player.y + 4, width: checkDist, height: this.player.height - 8 };
+
+        for (const w of this.levelData.walls) {
+            if (w.id && this.activeButtons.has(w.id)) continue;
+            const wr = { x: w.x, y: w.y, width: w.w, height: w.h };
+            if (this.rectIntersect(leftRect, wr)) side = -1;
+            if (this.rectIntersect(rightRect, wr)) side = 1;
+        }
+        return side;
     }
 
     resolveCollisions(horizontal) {
@@ -829,10 +1092,21 @@ class Game {
         if (this.isGoalReached) return;
         this.isGoalReached = true;
         this.goalTimer = 90; // 1.5 seconds at 60fps
-        this.spawnParticles(this.player.x + 16, this.player.y + 21, CONFIG.COLORS.GOAL, 30);
+        this.spawnParticles(this.player.x + this.player.width / 2, this.player.y + this.player.height / 2, CONFIG.COLORS.GOAL, 30);
     }
 
     showLevelClearScreen() {
+        const grade = this.calcGrade();
+        this.gameData.grades[this.currentLevel] = grade;
+        if (!this.gameData.unlocked.includes(this.currentLevel + 1)) {
+            this.gameData.unlocked.push(this.currentLevel + 1);
+        }
+        this.saveData();
+
+        document.getElementById('clear-grade').textContent = grade;
+        document.getElementById('clear-time').textContent = (this.levelTimer / 60).toFixed(2) + "s";
+        document.getElementById('clear-deaths').textContent = this.deaths;
+
         if (this.currentLevel >= 0 && this.currentLevel <= 6) {
              const idText = this.currentLevel === 0 ? 'Tutorial' : this.currentLevel;
              document.getElementById('cleared-sector-id').textContent = idText;
@@ -848,6 +1122,16 @@ class Game {
         }
     }
 
+    calcGrade() {
+        const t = this.levelTimer / 60;
+        const d = this.deaths;
+        // Simple heuristic
+        if (t < 15 && d === 0) return 'S';
+        if (t < 25 && d < 2) return 'A';
+        if (t < 40 && d < 5) return 'B';
+        return 'C';
+    }
+
     spawnParticles(x, y, color, count) {
         for (let i = 0; i < count; i++) this.particles.push(new Particle(x, y, color));
     }
@@ -858,10 +1142,18 @@ class Game {
     }
 
     draw() {
-        this.ctx.fillStyle = CONFIG.COLORS.BACKGROUND;
+        if (this.shakeTime > 0) {
+            this.ctx.save();
+            this.ctx.translate((Math.random() - 0.5) * 8, (Math.random() - 0.5) * 8);
+            this.shakeTime--;
+        }
+
+        // Background
+        this.drawParallax();
+
+        this.ctx.fillStyle = 'rgba(10, 10, 20, 0.4)'; // Slight trail for motion
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
-        // Subtle Grid
         this.ctx.strokeStyle = 'rgba(0, 242, 255, 0.03)';
         this.ctx.lineWidth = 1;
         const offset = -(this.camera.x % 40);
@@ -960,12 +1252,59 @@ class Game {
             this.ctx.shadowColor = '#ff00ff';
             this.ctx.strokeStyle = '#ff00ff';
             this.ctx.lineWidth = 2;
-            this.ctx.strokeRect(this.player.x - this.camera.x - 2, this.player.y - this.camera.y - 2, 36, 46);
+            this.ctx.strokeRect(this.player.x - this.camera.x - 4, this.player.y - this.camera.y - 4, this.player.width + 8, this.player.height + 8);
         } else {
              this.ctx.shadowBlur = 15;
              this.ctx.shadowColor = CONFIG.COLORS.PLAYER;
         }
-        this.ctx.fillRect(this.player.x - this.camera.x, this.player.y - this.camera.y, this.player.width, this.player.height);
+
+        if (this.player.shape === 'triangle') {
+            this.ctx.beginPath();
+            const rw = this.player.renderW;
+            const rh = this.player.renderH;
+            const ox = this.player.x + this.player.width / 2 - this.camera.x;
+            const oy = this.player.y + this.player.height - this.camera.y;
+            this.ctx.moveTo(ox, oy - rh);
+            this.ctx.lineTo(ox + rw / 2, oy);
+            this.ctx.lineTo(ox - rw / 2, oy);
+            this.ctx.closePath();
+            this.ctx.fill();
+        } else if (this.player.shape === 'circle') {
+            this.ctx.beginPath();
+            const rw = this.player.renderW;
+            const rh = this.player.renderH;
+            this.ctx.ellipse(this.player.x + this.player.width / 2 - this.camera.x, this.player.y + this.player.height / 2 - this.camera.y, rw / 2, rh / 2, 0, 0, Math.PI * 2);
+            this.ctx.fill();
+        } else {
+            // Cube: Draw with squash and stretch
+            const rw = this.player.renderW;
+            const rh = this.player.renderH;
+            const dx = this.player.x + this.player.width / 2 - rw / 2 - this.camera.x;
+            const dy = this.player.y + this.player.height - rh - this.camera.y;
+            this.ctx.fillRect(dx, dy, rw, rh);
+            
+            // After-images for Cube (Momentum)
+            if (Math.abs(this.player.vx) > 8 || Math.abs(this.player.vy) > 12) {
+                this.ctx.globalAlpha = 0.3;
+                this.ctx.fillRect(dx - this.player.vx * 2, dy - this.player.vy * 2, rw, rh);
+                this.ctx.globalAlpha = 0.15;
+                this.ctx.fillRect(dx - this.player.vx * 4, dy - this.player.vy * 4, rw, rh);
+                this.ctx.globalAlpha = 1.0;
+            }
+
+            // Speed Lines for high velocity (Commercial Juice)
+            if (Math.abs(this.player.vx) > 10) {
+                this.ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+                this.ctx.lineWidth = 1;
+                this.ctx.beginPath();
+                for(let i=0; i<3; i++) {
+                    const ly = dy + Math.random() * rh;
+                    this.ctx.moveTo(dx, ly);
+                    this.ctx.lineTo(dx - this.player.vx * 5, ly);
+                }
+                this.ctx.stroke();
+            }
+        }
         this.ctx.shadowBlur = 0;
 
         // Particles
@@ -976,8 +1315,8 @@ class Game {
         });
 
         // Hints
-        this.ctx.fillStyle = 'rgba(255,255,255,0.6)';
-        this.ctx.font = '16px Outfit';
+        this.ctx.fillStyle = 'rgba(255,255,255,0.7)';
+        this.ctx.font = '18px sans-serif'; // Use sans-serif for Japanese support
         this.levelData.hints.forEach(h => {
             this.ctx.fillText(h.text, h.x - this.camera.x, h.y - this.camera.y);
         });
@@ -993,8 +1332,59 @@ class Game {
             this.ctx.textAlign = 'left';
         }
 
+        // Post-Processing
+        this.drawPostProcessing();
+
         // UI Overlay
         this.drawUI();
+        
+        // Transitions
+        if (this.fadeAlpha > 0) {
+            this.ctx.fillStyle = `rgba(0,0,0,${this.fadeAlpha})`;
+            this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        }
+
+        if (this.player.isRecording && Math.random() > 0.9) this.ctx.restore(); // Restore glitch
+        if (this.shakeTime > 0) this.ctx.restore();
+    }
+
+    drawParallax() {
+        const cx = this.camera.x;
+        const cy = this.camera.y;
+
+        // Layer 1: Far Stars (Slowest)
+        this.ctx.fillStyle = '#114';
+        for (let i = 0; i < 50; i++) {
+            let x = (i * 12345 % 4000) - cx * 0.1;
+            let y = (i * 9876 % 600) - cy * 0.05;
+            this.ctx.fillRect(x, y, 2, 2);
+        }
+
+        // Layer 2: Mid structures
+        this.ctx.fillStyle = 'rgba(30, 30, 50, 0.5)';
+        for (let i = 0; i < 20; i++) {
+            let x = (i * 3333 % 5000) - cx * 0.3;
+            let y = 300 - cy * 0.1;
+            this.ctx.fillRect(x, y, 100, 300);
+        }
+    }
+
+    drawPostProcessing() {
+        // Vignette
+        const grad = this.ctx.createRadialGradient(
+            this.canvas.width/2, this.canvas.height/2, 100,
+            this.canvas.width/2, this.canvas.height/2, 600
+        );
+        grad.addColorStop(0, 'rgba(0,0,0,0)');
+        grad.addColorStop(1, 'rgba(0,0,0,0.4)');
+        this.ctx.fillStyle = grad;
+        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+        // Scanlines
+        this.ctx.fillStyle = 'rgba(0,0,0,0.05)';
+        for (let i = 0; i < this.canvas.height; i += 4) {
+            this.ctx.fillRect(0, i, this.canvas.width, 1);
+        }
     }
 
     drawUI() {
@@ -1002,13 +1392,14 @@ class Game {
         this.ctx.fillStyle = 'white';
         this.ctx.font = '700 14px Outfit';
         this.ctx.fillText(`SECTOR: ${this.currentLevel === 0 ? 'T' : this.currentLevel}`, 20, 30);
-        this.ctx.fillText(`ECHOES: ${this.echoes.length}/${CONFIG.MAX_ECHOES}`, 20, 50);
+        this.ctx.fillText(`ECHOES: ${this.echoes.length}/${this.player.maxEchoes}`, 20, 50);
+        this.ctx.fillText(`AVATAR: ${CHARACTERS[this.selectedCharId].name}`, 20, 70);
         
         if (this.player.isRecording) {
             const blink = Math.floor(Date.now() / 400) % 2 === 0;
             if (blink) {
                 this.ctx.fillStyle = '#ff00ff';
-                this.ctx.fillText('PHASE RECORDING...', 20, 70);
+                this.ctx.fillText('PHASE RECORDING...', 20, 90);
             }
         }
     }
