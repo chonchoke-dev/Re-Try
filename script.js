@@ -825,6 +825,7 @@ class Game {
     }
 
     loop() {
+        this.updateFade();
         if (!this.isPaused && this.currentScreen === 'game') {
             this.update();
         }
@@ -832,19 +833,20 @@ class Game {
         requestAnimationFrame(() => this.loop());
     }
 
-    update() {
-        // Fade logic
+    updateFade() {
         if (this.isFading) {
             this.fadeAlpha += 0.05;
             if (this.fadeAlpha >= 1) {
                 this.executeScreenSwitch(this.fadeTarget);
                 this.isFading = false;
-                this.fadeAlpha = 1; // Start fading back in next frame?
+                this.fadeAlpha = 1; 
             }
         } else if (this.fadeAlpha > 0) {
             this.fadeAlpha -= 0.05;
         }
+    }
 
+    update() {
         if (this.currentScreen !== 'game') return;
 
         if (this.isGoalReached) {
